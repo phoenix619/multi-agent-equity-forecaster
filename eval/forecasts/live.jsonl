@@ -1,0 +1,15 @@
+{"ticker": "AAPL", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:04:06+00:00", "probability": 0.65, "rating": "Moderate Buy"}
+{"ticker": "MSFT", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:04:27+00:00", "probability": 0.45, "rating": "Hold"}
+{"ticker": "NVDA", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:04:46+00:00", "probability": 0.35, "rating": "Moderate Sell"}
+{"ticker": "AMZN", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:05:03+00:00", "probability": 0.6, "rating": "Moderate Buy"}
+{"ticker": "GOOGL", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:05:19+00:00", "probability": 0.45, "rating": "Hold"}
+{"ticker": "META", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:05:36+00:00", "probability": 0.35, "rating": "Moderate Sell"}
+{"ticker": "XOM", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:05:52+00:00", "probability": 0.42, "rating": "Hold"}
+{"ticker": "DAL", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:06:17+00:00", "probability": 0.55, "rating": "Hold"}
+{"ticker": "MU", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:06:32+00:00", "probability": 0.42, "rating": "Hold"}
+{"ticker": "JNJ", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:06:56+00:00", "probability": 0.6, "rating": "Moderate Buy"}
+{"ticker": "WMT", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:07:17+00:00", "probability": 0.45, "rating": "Hold"}
+{"ticker": "HD", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:07:36+00:00", "probability": 0.45, "rating": "Hold"}
+{"ticker": "CAT", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:08:01+00:00", "probability": 0.45, "rating": "Hold"}
+{"ticker": "NEE", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:08:23+00:00", "probability": 0.45, "rating": "Hold"}
+{"ticker": "PG", "as_of": "2026-11-16", "variant": "single_agent_react", "model": "gpt-oss:20b", "created_at": "2026-11-17T00:08:41+00:00", "probability": 0.55, "rating": "Hold"}

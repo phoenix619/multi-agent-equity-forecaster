@@ -1,0 +1,4 @@
+requests
+pandas
+yfinance
+mcp>=1.2
