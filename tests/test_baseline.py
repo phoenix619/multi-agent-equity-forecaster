@@ -52,3 +52,16 @@ def test_gaps_clean_when_all_present():
     trace = [_tool(n, fin if n == "get_financials" else {}) for n in baseline.EXPECTED_TOOLS]
     gaps = baseline.coverage_gaps(trace, "2026-11-16")
     assert gaps == list(baseline.UNAVAILABLE)
+
+
+def test_gap_when_newest_filing_missing_from_structured_data():
+    q = {"revenue": {"period_end": "2026-03-31"}, "net_income": {}, "operating_cash_flow": {},
+         "long_term_debt": {}, "equity": {}}
+    fin = {"quarter": q, "annual": {"revenue": {}, "net_income": {}, "operating_cash_flow": {}},
+           "freshness": {"lag": True, "latest_period_in_structured_data": "2026-03-31",
+                         "latest_filing": {"form": "10-Q", "period": "2026-09-30",
+                                           "filed": "2026-10-21"}}}
+    trace = [_tool(n, fin if n == "get_financials" else {}) for n in baseline.EXPECTED_TOOLS]
+    gaps = baseline.coverage_gaps(trace, "2026-11-17")
+    assert any("not in SEC structured data" in g for g in gaps)
+    assert not any("days before the as-of date" in g for g in gaps)   # no duplicate

@@ -41,15 +41,19 @@ TOOL_SCHEMAS = [
                        "required": ["ticker"]}}},
 ]
 
+BALANCE_SHEET = {"long_term_debt", "equity"}
 KEEP = ["revenue", "gross_profit", "operating_income", "net_income",
         "operating_cash_flow", "long_term_debt", "equity"]
 
 
 def _trim_financials(fin: dict) -> dict:
     out = {"ticker": fin["ticker"], "entity": fin["entity"], "as_of": fin["as_of"]}
+    out["freshness"] = fin.get("freshness")
     for kind in ("quarter", "annual"):
         block = {}
         for k in KEEP:
+            if kind == "annual" and k in BALANCE_SHEET:
+                continue  # point-in-time items appear once, in the quarter block
             f = fin[kind].get(k)
             if f:
                 block[k] = {"value": f["value"], "period_end": f["period_end"],
