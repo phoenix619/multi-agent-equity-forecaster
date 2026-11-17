@@ -7,4 +7,7 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 scripts/local_test_results.json
+RESULTS.md
 logs/
+eval/backtest/forecasts_superseded_v0.jsonl
+eval/**/scored_*_rows.json

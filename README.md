@@ -15,10 +15,12 @@ Work in progress (final deliverables due Nov 20, 2026).
 | Macro relevance rules by SIC code | Done |
 | Single-agent ReAct baseline | Done |
 | Forecast log + scorer (Brier, calibration) | Done |
-| Unit tests (35, offline) | Done |
+| Unit tests (51, offline) | Done |
 | Historical backtest runner | Ready, not yet run |
 | MCP servers (EDGAR, prices, FRED) | Written, not yet wired into the agent |
-| Multi-agent LangGraph pipeline (Orchestrator, Fundamentals, Analyst, Macro/News, Technical, Strategist, Critic, Verifier) | Planned |
+| Deterministic Verifier (numbers vs tool results) | Done |
+| Multi-agent LangGraph pipeline: specialists, Strategist, Critic, guardrail routing | Built, first live runs pending |
+| Analyst and news data sources | Planned (specialist slot reports a gap) |
 | RAG over 10-K/10-Q filings (MMR retrieval) | Planned |
 | Tree-of-Thought judge, guardrail routing, ablation | Planned |
 | Streamlit chat UI | Planned |
@@ -75,6 +77,7 @@ python scripts/smoke_data.py                      # check the data tools live
 python scripts/test_local.py                      # check local models (tool calls, JSON)
 python scripts/run_baseline.py AAPL               # one forecast, as of today
 python scripts/run_baseline.py AAPL 2026-09-21    # as of a past date
+python scripts/run_baseline.py AAPL --variant multi_critic_verifier   # multi-agent
 python scripts/run_universe.py                    # all tickers, appended to eval/forecasts/live.jsonl
 python scripts/run_backtest.py --dates 2026-09-21 # resumable historical backtest
 python scripts/score.py [live]                    # score logged forecasts

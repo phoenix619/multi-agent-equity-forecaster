@@ -90,13 +90,21 @@ def coverage_gaps(trace: list, as_of: str) -> list:
             gaps.append(f"{name} returned an error")
     fin = _tool_results(trace).get("get_financials")
     if fin:
-        for kind in ("quarter", "annual"):
-            missing = [k for k in ("revenue", "net_income", "operating_cash_flow",
-                                   "long_term_debt", "equity") if k not in fin.get(kind, {})]
+        need = {"quarter": ("revenue", "net_income", "operating_cash_flow",
+                            "long_term_debt", "equity"),
+                "annual": ("revenue", "net_income", "operating_cash_flow")}
+        for kind, keys in need.items():
+            missing = [k for k in keys if k not in fin.get(kind, {})]
             if missing:
                 gaps.append(f"{kind} figures not reported: {', '.join(missing)}")
+        fresh = fin.get("freshness") or {}
         end = fin.get("quarter", {}).get("revenue", {}).get("period_end")
-        if end:
+        if fresh.get("lag"):
+            lf = fresh["latest_filing"]
+            gaps.append(f"newest filing ({lf['form']} for period ended {lf['period']}, filed "
+                        f"{lf['filed']}) is not in SEC structured data; figures use the period "
+                        f"ended {fresh['latest_period_in_structured_data']}")
+        elif end:
             age = (datetime.strptime(as_of, "%Y-%m-%d") - datetime.strptime(end, "%Y-%m-%d")).days
             if age > 135:
                 gaps.append(f"latest quarterly period ended {age} days before the as-of date")
@@ -224,6 +232,15 @@ def log_forecast(result: dict, folder: str = "forecasts", name: str = "live.json
     row["mode"] = mode
     row["probability"] = result["forecast"]["probability"] if result["forecast"] else None
     row["rating"] = result["forecast"].get("rating") if result["forecast"] else None
+    ver = (result["forecast"] or {}).get("verification")
+    if ver:  # multi-agent variants: guardrail outcome, for the ablation analysis
+        row["verification"] = ver["status"]
+        row["unverified"] = len(ver["unverified"])
+        row["abstained"] = ver.get("abstained", False)
+        row["revisions"] = result["forecast"].get("revisions", 0)
+        crit = result["forecast"].get("critic") or {}
+        row["critic_verdict"] = crit.get("verdict")
+        row["critic_failed"] = bool(crit.get("failed"))
     with p.open("a") as f:
         f.write(json.dumps(row) + "\n")
     return p

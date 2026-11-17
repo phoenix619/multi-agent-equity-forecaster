@@ -106,7 +106,9 @@ def technical_summary(df: pd.DataFrame) -> dict:
         hi_e = lo_e + 0.25 * atr_v
     entry_zone = (round(lo_e, 2), round(hi_e, 2))
     stop = round(entry_zone[0] - 2 * atr_v, 2)
-    target = round(max(upper, entry_zone[1] + 2 * atr_v), 2)
+    # Upper Bollinger band, but never beyond 4 x ATR above entry (2:1 reward to the
+    # 2 x ATR stop); in a sharp downtrend the band can sit 50% above the price.
+    target = round(min(max(upper, entry_zone[1] + 2 * atr_v), entry_zone[1] + 4 * atr_v), 2)
     signal = ("uptrend intact but short-term stretched: wait for a pullback toward "
               "the 20-day average" if uptrend and stretched else
               "uptrend intact and not stretched: entry near current price is reasonable"
@@ -124,5 +126,5 @@ def technical_summary(df: pd.DataFrame) -> dict:
         "trend": trend, "momentum": momentum, "volatility": volatility,
         "signal": signal,
         "paper_trade": {"entry_zone": entry_zone, "stop_loss": stop, "target": target,
-                        "note": "stop = 2 x ATR below entry zone; paper only"},
+                        "note": "stop = 2 x ATR below entry zone; target capped at 4 x ATR; paper only"},
     }

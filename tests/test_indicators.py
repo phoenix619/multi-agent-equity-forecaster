@@ -75,3 +75,12 @@ def test_technical_summary_downtrend_flags_timing():
 
 def test_technical_summary_short_history_errors():
     assert "error" in ind.technical_summary(_ohlc(np.linspace(100, 110, 30)))
+
+
+def test_target_capped_in_sharp_downtrend():
+    close = np.concatenate([np.linspace(200, 210, 200), np.linspace(210, 150, 60)])
+    out = ind.technical_summary(_ohlc(close))
+    lo, hi = out["paper_trade"]["entry_zone"]
+    atr = out["atr14"]
+    assert out["paper_trade"]["target"] <= hi + 4 * atr + 0.01
+    assert out["paper_trade"]["target"] > hi

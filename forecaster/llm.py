@@ -14,6 +14,21 @@ from .config import (CACHE_DIR, DAILY_CALL_BUDGET, LLM_API_KEY, LLM_BASE_URL,
                      MODELS)
 
 
+MAX_ESCALATE = 16000  # token ceiling when a reasoning model runs out of budget
+
+
+def truncated(resp: dict) -> bool:
+    """True when the model hit max_tokens before writing any answer (reasoning models
+    can spend the whole budget thinking and return empty content)."""
+    try:
+        ch = resp["choices"][0]
+        msg = ch["message"]
+    except (KeyError, IndexError, TypeError):
+        return False
+    return (ch.get("finish_reason") == "length" and not (msg.get("content") or "").strip()
+            and not msg.get("tool_calls"))
+
+
 class BudgetExceeded(RuntimeError):
     """Raised when today's request budget is used up."""
 
@@ -41,7 +56,8 @@ def _count_call() -> None:
 
 def chat(role_or_model: str, messages: list, tools: list | None = None,
          temperature: float = 0.2, max_tokens: int = 3000,
-         use_cache: bool = True, retries: int = 3) -> dict:
+         use_cache: bool = True, retries: int = 3,
+         reasoning_effort: str | None = None, escalate: bool = True) -> dict:
     """Send a chat completion. role_or_model is a key of MODELS or a model name.
 
     Cache hits cost nothing. Returns the full response JSON; check for an
@@ -53,11 +69,13 @@ def chat(role_or_model: str, messages: list, tools: list | None = None,
             "max_tokens": max_tokens}
     if tools:
         body["tools"] = tools
+    if reasoning_effort:  # Ollama /v1 honours "none" (thinking off), "low", "medium", "high"
+        body["reasoning_effort"] = reasoning_effort
 
     key = cache.make_key(body)
     if use_cache:
         hit = cache.get("llm", key)
-        if hit is not None:
+        if hit is not None and not truncated(hit):  # ignore cached empty answers
             return hit
 
     if DAILY_CALL_BUDGET and calls_today() >= DAILY_CALL_BUDGET:
@@ -87,7 +105,10 @@ def chat(role_or_model: str, messages: list, tools: list | None = None,
             last = r.json()
         except ValueError:
             last = {"error": {"message": r.text[:300]}}
-        if "error" not in last and use_cache:
+        if escalate and truncated(last) and body["max_tokens"] < MAX_ESCALATE:
+            body["max_tokens"] = min(body["max_tokens"] * 2, MAX_ESCALATE)
+            continue  # the model ran out of budget while thinking: retry with more
+        if "error" not in last and use_cache and not truncated(last):
             cache.put("llm", key, last)
         return last
     return last

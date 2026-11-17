@@ -1,6 +1,6 @@
 """SEC EDGAR: financial facts, ratios and filing lists, as of a given date."""
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import requests
 
@@ -44,6 +44,36 @@ def _company_facts(cik: str) -> dict:
         ttl=3 * DAY)
 
 
+# Companies that reorganized into a new registrant: the SEC ticker lookup returns the
+# new CIK, whose structured data starts at the reorganization. Merge the predecessor's
+# history so earlier as-of dates have fundamentals. (XOM -> ExxonMobil Holdings.)
+PREDECESSORS = {"XOM": ["0000034088"]}
+
+
+def _merged_facts(ticker: str, cik: str) -> dict:
+    facts = _company_facts(cik)
+    extra = PREDECESSORS.get(ticker.upper(), [])
+    if not extra:
+        return facts
+    gaap = {c: {"units": {u: list(rows) for u, rows in n.get("units", {}).items()}}
+            for c, n in facts.get("facts", {}).get("us-gaap", {}).items()}
+    for pcik in extra:
+        try:
+            old = _company_facts(pcik)
+        except Exception:  # predecessor unavailable: fall back to the successor alone
+            continue
+        for concept, node in old.get("facts", {}).get("us-gaap", {}).items():
+            units = gaap.setdefault(concept, {"units": {}})["units"]
+            for unit, rows in node.get("units", {}).items():
+                have = units.setdefault(unit, [])
+                seen = {(r["end"], r.get("start"), r["filed"], r["accn"], r["val"])
+                        for r in have}
+                have.extend(r for r in rows
+                            if (r["end"], r.get("start"), r["filed"], r["accn"], r["val"])
+                            not in seen)
+    return {"entityName": facts.get("entityName"), "facts": {"us-gaap": gaap}}
+
+
 def _submissions(cik: str) -> dict:
     return cache.cached(
         "edgar", ["subs", cik],
@@ -52,16 +82,23 @@ def _submissions(cik: str) -> dict:
 
 
 CONCEPTS = {
+    # Companies switch XBRL concepts over time (NEE's "Revenues" stops in 2013), so
+    # _fact takes whichever concept has the most recent period, not the first listed.
     "revenue": ["RevenueFromContractWithCustomerExcludingAssessedTax",
-                "Revenues", "SalesRevenueNet"],
+                "RevenueFromContractWithCustomerIncludingAssessedTax",
+                "Revenues", "SalesRevenueNet", "RegulatedAndUnregulatedOperatingRevenue"],
     "gross_profit": ["GrossProfit"],
     "operating_income": ["OperatingIncomeLoss"],
-    "net_income": ["NetIncomeLoss"],
+    "net_income": ["NetIncomeLoss", "ProfitLoss",
+                   "NetIncomeLossAvailableToCommonStockholdersBasic"],
     "operating_cash_flow": ["NetCashProvidedByUsedInOperatingActivities"],
-    "long_term_debt": ["LongTermDebtNoncurrent", "LongTermDebt"],
-    "equity": ["StockholdersEquity"],
+    "long_term_debt": ["LongTermDebtNoncurrent", "LongTermDebt",
+                       "LongTermDebtAndCapitalLeaseObligations"],
+    "equity": ["StockholdersEquity",
+               "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
     "total_assets": ["Assets"],
 }
+MAX_AGE_DAYS = 460  # a figure older than ~15 months is "not reported", never "latest"
 FLOW = {"revenue", "gross_profit", "operating_income", "net_income",
         "operating_cash_flow"}
 
@@ -135,6 +172,8 @@ def _quarter_flow(rows: list, as_of: date):
 
 
 def _fact(facts: dict, name: str, as_of: date, kind: str):
+    """Most recent figure across all candidate concepts (latest period, then filing)."""
+    best = None
     for concept in CONCEPTS[name]:
         node = facts.get("facts", {}).get("us-gaap", {}).get(concept)
         if not node:
@@ -144,16 +183,20 @@ def _fact(facts: dict, name: str, as_of: date, kind: str):
             f = _quarter_flow(rows, as_of)
         else:
             f = _pick(rows, as_of, "instant" if name not in FLOW else kind)
-        if f:
-            return {"value": f["val"], "period_end": f["end"], "filed": f["filed"],
-                    "form": f["form"], "accession": f["accn"], "concept": concept,
-                    "fiscal_year": f.get("fy"), "fiscal_period": f.get("fp"),
-                    "derived": f.get("derived")}
-    return None
+        if f and (best is None or (f["end"], f["filed"]) > (best[0]["end"], best[0]["filed"])):
+            best = (f, concept)
+    if not best or (as_of - _d(best[0]["end"])).days > MAX_AGE_DAYS:
+        return None
+    f, concept = best
+    return {"value": f["val"], "period_end": f["end"], "filed": f["filed"],
+            "form": f["form"], "accession": f["accn"], "concept": concept,
+            "fiscal_year": f.get("fy"), "fiscal_period": f.get("fp"),
+            "derived": f.get("derived")}
 
 
 def _ratio(num, den):
-    if num and den and den["value"] != 0:
+    """num / den, only when both figures cover the same period end (never mix periods)."""
+    if num and den and den["value"] != 0 and num.get("period_end") == den.get("period_end"):
         return round(num["value"] / den["value"], 4)
     return None
 
@@ -166,7 +209,7 @@ def get_financials(ticker: str, as_of: str) -> dict:
     """
     cutoff = _d(as_of)
     cik = ticker_to_cik(ticker)
-    facts = _company_facts(cik)
+    facts = _merged_facts(ticker, cik)
     out = {"ticker": ticker.upper(), "cik": cik, "as_of": as_of,
            "entity": facts.get("entityName")}
     for kind in ("quarter", "annual"):
@@ -175,10 +218,27 @@ def get_financials(ticker: str, as_of: str) -> dict:
             "gross_margin": _ratio(block["gross_profit"], block["revenue"]),
             "operating_margin": _ratio(block["operating_income"], block["revenue"]),
             "net_margin": _ratio(block["net_income"], block["revenue"]),
-            "debt_to_equity": _ratio(block["long_term_debt"], block["equity"]),
         }
+        if kind == "quarter":  # balance-sheet items are point-in-time: one set, latest
+            block["ratios"]["debt_to_equity"] = _ratio(block["long_term_debt"], block["equity"])
         out[kind] = block
+    out["freshness"] = _freshness(ticker, cutoff, out["quarter"])
     return out
+
+
+def _freshness(ticker: str, cutoff: date, quarter: dict):
+    """Is the newest filing reflected in SEC's structured data? (It sometimes lags.)"""
+    latest = list_filings(ticker, cutoff.isoformat(), limit=1)
+    if not latest:
+        return None
+    lf = latest[0]
+    periods = [v["period_end"] for v in quarter.values()
+               if isinstance(v, dict) and v.get("period_end")]
+    have = max(periods) if periods else None
+    lag = bool(lf["period"] and have
+               and _d(lf["period"]) > _d(have) + timedelta(days=20))
+    return {"latest_filing": {"form": lf["form"], "filed": lf["filed"], "period": lf["period"]},
+            "latest_period_in_structured_data": have, "lag": lag}
 
 
 def company_profile(ticker: str) -> dict:

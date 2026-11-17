@@ -1,8 +1,10 @@
-"""Run the single-agent ReAct baseline on one ticker.
+"""Run one forecast for one ticker with any architecture variant.
 Run from the equity-forecaster folder:
-    python scripts/run_baseline.py AAPL                  # as of today
+    python scripts/run_baseline.py AAPL                  # single-agent baseline, as of today
     python scripts/run_baseline.py DAL 2026-11-13        # as of a past date
     python scripts/run_baseline.py AAPL --log            # also append to the live forecast log
+    python scripts/run_baseline.py AAPL --variant multi_critic_verifier
+Variants: single_agent_react (default), multi_specialists, multi_critic_verifier
 """
 import json
 import sys
@@ -11,23 +13,39 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from forecaster import baseline
+from forecaster import baseline, variants
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
+    variant = "single_agent_react"
+    if "--variant" in argv:
+        i = argv.index("--variant")
+        variant = argv[i + 1]
+        del argv[i:i + 2]
+    args = [a for a in argv if not a.startswith("--")]
     ticker = args[0] if args else "AAPL"
     as_of = args[1] if len(args) > 1 else date.today().isoformat()
 
-    res = baseline.run(ticker, as_of)
+    res = variants.run(variant, ticker, as_of)
     trace_path = baseline.save_trace(res)
 
-    print(f"\n{res['ticker']} as of {as_of}  model={res['model']}  "
+    print(f"\n{res['ticker']} as of {as_of}  variant={res['variant']}  model={res['model']}  "
           f"{res['model_calls']} model calls, {res['tool_calls']} tool calls, {res['seconds']}s")
     for t in res["trace"]:
         if t["type"] == "tool":
-            print(f"  step {t['step']}: {t['tool']}({t['args']}) -> "
+            print(f"  {t.get('agent', 'agent')} step {t['step']}: {t['tool']}({t['args']}) -> "
                   f"{'ok' if t['ok'] else 'ERROR'} ({t['result_chars']} chars)")
+        elif t.get("type") == "timing":
+            print(f"  {t['agent']}: {t['seconds']}s")
+        elif t.get("agent") == "critic" and t.get("type") == "review":
+            print(f"  critic: {t['verdict']}{'  (NO VALID ANSWER - defaulted)' if t.get('failed') else ''}")
+            if t.get("weakest_claim"):
+                print(f"    weakest claim: {t['weakest_claim']}")
+            for i in t.get("issues", []):
+                print(f"    {i.get('type')}: {i.get('detail')}")
+        elif t.get("agent") == "verifier":
+            print(f"  verifier: {t.get('status')}")
     if res["error"]:
         print("\nERROR:", res["error"])
     f = res["forecast"]
@@ -51,6 +69,13 @@ def main():
             print(f"Paper trade (from technicals): entry {pt['entry_zone'][0]} to "
                   f"{pt['entry_zone'][1]}, stop {pt['stop_loss']}, target {pt['target']}")
             print(f"  signal: {pt.get('signal')}")
+        v = f.get("verification")
+        if v:
+            print(f"Verifier: {v['status']} ({v['checked']} numbers checked, "
+                  f"{len(v['unverified'])} unverified"
+                  f"{', ABSTAINED' if v.get('abstained') else ''}); revisions: {f.get('revisions')}")
+            for u in v["unverified"]:
+                print(f"  unverified: {u['number']} in {u['where']}")
         if "--log" in sys.argv:
             print("Logged to", baseline.log_forecast(res))
     print("\nTrace saved:", trace_path)
