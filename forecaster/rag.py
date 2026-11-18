@@ -198,6 +198,11 @@ def search_filings(ticker: str, as_of: str, query: str, k: int = RAG_TOP_K) -> d
                           f"{chunks[i]['section']} (period {chunks[i]['period']}, "
                           f"filed {chunks[i]['filed']})",
                 "similarity": round(float(vectors[i] @ q), 3)} for i in picked]
-    return {"ticker": ticker.upper(), "as_of": as_of, "query": query,
-            "filings_searched": [f"{f['form']} {f['accession']} filed {f['filed']}" for f in filings],
-            "results": results}
+    from . import guard
+    results, removed = guard.drop_injected(results)   # filings are untrusted input
+    out = {"ticker": ticker.upper(), "as_of": as_of, "query": query,
+           "filings_searched": [f"{f['form']} {f['accession']} filed {f['filed']}" for f in filings],
+           "results": results}
+    if removed:
+        out["passages_removed_as_instruction_like"] = removed
+    return out

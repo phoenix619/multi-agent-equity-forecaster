@@ -4,6 +4,7 @@ Run from the equity-forecaster folder:
     python scripts/run_baseline.py DAL 2026-11-13        # as of a past date
     python scripts/run_baseline.py AAPL --log            # also append to the live forecast log
     python scripts/run_baseline.py AAPL --variant multi_critic_verifier
+    python scripts/run_baseline.py AAPL --request "Should I buy it?"   # declined by the input guard
     python scripts/run_baseline.py AAPL --variant multi_rag --mcp   # filing RAG, tools via MCP
 Variants: single_agent_react (default), multi_specialists, multi_critic_verifier, multi_rag
 """
@@ -24,6 +25,11 @@ def main():
         import os
         os.environ["TOOL_BACKEND"] = "mcp"
         argv.remove("--mcp")
+    request = ""
+    if "--request" in argv:                   # optional free-text request, screened by the input guard
+        i = argv.index("--request")
+        request = argv[i + 1]
+        del argv[i:i + 2]
     if "--variant" in argv:
         i = argv.index("--variant")
         variant = argv[i + 1]
@@ -32,7 +38,11 @@ def main():
     ticker = args[0] if args else "AAPL"
     as_of = args[1] if len(args) > 1 else date.today().isoformat()
 
-    res = variants.run(variant, ticker, as_of)
+    res = variants.run(variant, ticker, as_of, request)
+    if res.get("refused"):
+        print(f"\nDECLINED ({res['refused']['category']}): {res['refused']['reason']}")
+        print(res["disclaimer"])
+        return
     trace_path = baseline.save_trace(res)
 
     print(f"\n{res['ticker']} as of {as_of}  variant={res['variant']}  model={res['model']}  "

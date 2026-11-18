@@ -6,3 +6,4 @@ mcp>=1.2,<2
 langgraph
 beautifulsoup4
 lxml
+streamlit
