@@ -1,0 +1,80 @@
+{
+ "n": 165,
+ "dates": 11,
+ "rules": {
+  "mom_6_1": {
+   "auc": 0.499,
+   "auc_ci": [
+    0.407,
+    0.598
+   ],
+   "brier": 0.254,
+   "brier_ci": [
+    0.248,
+    0.261
+   ],
+   "accuracy": 0.485
+  },
+  "rev_1m": {
+   "auc": 0.549,
+   "auc_ci": [
+    0.471,
+    0.616
+   ],
+   "brier": 0.248,
+   "brier_ci": [
+    0.239,
+    0.257
+   ],
+   "accuracy": 0.545
+  },
+  "low_vol": {
+   "auc": 0.529,
+   "auc_ci": [
+    0.407,
+    0.63
+   ],
+   "brier": 0.2516,
+   "brier_ci": [
+    0.243,
+    0.261
+   ],
+   "accuracy": 0.509
+  }
+ },
+ "permutation": {
+  "multi_critic_verifier": {
+   "auc": 0.441,
+   "p_auc": 0.911,
+   "null_auc_mean": 0.499,
+   "brier": 0.2586,
+   "p_brier": 0.891,
+   "null_brier_mean": 0.2533
+  },
+  "multi_rag": {
+   "auc": 0.399,
+   "p_auc": 0.992,
+   "null_auc_mean": 0.499,
+   "brier": 0.2578,
+   "p_brier": 0.913,
+   "null_brier_mean": 0.2525
+  },
+  "multi_specialists": {
+   "auc": 0.423,
+   "p_auc": 0.964,
+   "null_auc_mean": 0.501,
+   "brier": 0.265,
+   "p_brier": 0.957,
+   "null_brier_mean": 0.2557
+  },
+  "single_agent_react": {
+   "auc": 0.427,
+   "p_auc": 0.937,
+   "null_auc_mean": 0.492,
+   "brier": 0.266,
+   "p_brier": 0.915,
+   "null_brier_mean": 0.2578
+  }
+ },
+ "const_50_brier": 0.25
+}
