@@ -19,7 +19,7 @@ _NUM = re.compile(
 _SCALE = {"thousand": 1e3, "k": 1e3, "million": 1e6, "m": 1e6,
           "billion": 1e9, "b": 1e9, "bn": 1e9, "trillion": 1e12}
 # A number followed by these is a window length or a form name, not a data point.
-_NOT_DATA = re.compile(r"\s?-?(day|week|month|year|trading|session|K\b|Q\b)|d\b", re.I)
+_NOT_DATA = re.compile(r"\s?-?(day|week|month|year|trading|session|K\b|Q\b)|d\b|y\b", re.I)
 _ACCESSION = re.compile(r"\b\d{10}-\d{2}-\d{6}\b")            # SEC accession numbers
 _MONTH_BEFORE = re.compile(
     r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*$", re.I)    # "September 26"
@@ -38,7 +38,9 @@ def collect_numbers(obj) -> list:
     out = []
     if isinstance(obj, bool):
         return out
-    if isinstance(obj, (int, float)):
+    if isinstance(obj, str):
+        out.extend(c["value"] for c in extract_claims(obj))   # figures written in tool text
+    elif isinstance(obj, (int, float)):
         out.append(abs(float(obj)))
     elif isinstance(obj, dict):
         for v in obj.values():
@@ -56,7 +58,10 @@ def tool_pool(tool_results: dict) -> list:
     for name, obs in tool_results.items():
         if name == "search_filings":
             for r in (obs or {}).get("results", []):
-                pool.extend(c["value"] for c in extract_claims(r.get("text", "")))
+                for c in extract_claims(r.get("text", "")):
+                    pool.append(c["value"])
+                    if not c["pct"] and c["value"] >= 100:      # table cells: "in millions/thousands"
+                        pool.extend((c["value"] * 1e3, c["value"] * 1e6))
         else:
             pool.extend(collect_numbers(obs))
     return pool
@@ -94,9 +99,14 @@ def extract_claims(text: str) -> list:
             (value in _WINDOWS and _INDICATOR.search(before))
             or (value in (30, 50, 70) and (_THRESHOLD.search(before)
                                            or "RSI" in before[-40:].upper()))))
+        tol = 0.5 * 10 ** (-decimals) * scale + 1e-9
+        digits = raw_num.replace(",", "")
+        if decimals == 0 and scale == 1.0 and value >= 1e6:
+            zeros = len(digits) - len(digits.rstrip("0"))
+            if zeros >= 4:                       # 19,560,000,000 means "about 19.56 billion"
+                tol = 0.5 * 10 ** zeros
         claims.append({"raw": m.group(0).strip(), "value": value * scale,
-                       "tol": 0.5 * 10 ** (-decimals) * scale + 1e-9, "pct": pct,
-                       "window": window})
+                       "tol": tol, "pct": pct, "window": window})
     return claims
 
 
@@ -125,6 +135,11 @@ def forecast_texts(forecast: dict) -> list:
 def verify_forecast(forecast: dict, tool_results: dict) -> dict:
     """Check every number in the draft against the tool results."""
     pool = tool_pool(tool_results)
+    for key in ("probability", "probability_raw"):     # the model quoting its own forecast
+        try:
+            pool.append(float(forecast[key]))
+        except (KeyError, TypeError, ValueError):
+            pass
     checked, unverified = 0, []
     for where, text in forecast_texts(forecast):
         for c in extract_claims(text):

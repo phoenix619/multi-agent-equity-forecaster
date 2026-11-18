@@ -110,3 +110,50 @@ def test_more_non_data_numbers_found_in_real_drafts():
     assert v.verify_forecast(draft(claims=["RSI is 63"]), TOOLS)["status"] == "orange"
     # a numeric range keeps both ends as claims
     assert [c["raw"] for c in v.extract_claims("a range of $100-$110")] == ["$100", "$110"]
+
+
+TECH_TEXT = {"get_technicals": {"volatility": "price at 99% of Bollinger range; ATR $11.54 (3.1% of price)",
+                                "rsi14": 55.0}}
+
+
+def test_numbers_inside_tool_text_fields_verify():
+    d = draft(claims=["Price is at 99% of Bollinger range with ATR of 11.54"])
+    assert v.verify_forecast(d, TECH_TEXT)["status"] == "green"
+    assert v.verify_forecast(draft(claims=["Price is at 88% of Bollinger range"]),
+                             TECH_TEXT)["status"] == "orange"
+
+
+def test_models_own_probability_is_not_a_claim():
+    d = dict(draft(rationale="keeps the probability near 45%, or 0.45 on a 0-1 scale",
+                   claims=["Net margin is 27.6%"]), probability=0.45)
+    assert v.verify_forecast(d, TOOLS)["status"] == "green"
+    # but a different percentage with no source is still flagged
+    d2 = dict(draft(rationale="up 38%", claims=["Net margin is 27.6%"]), probability=0.45)
+    assert v.verify_forecast(d2, TOOLS)["status"] == "orange"
+
+
+def test_treasury_tenor_suffix_is_not_a_claim():
+    assert v.extract_claims("Treasury 10Y is 4.18 and the 2Y is 3.9") == [
+        c for c in v.extract_claims("Treasury is 4.18 and the is 3.9")]
+
+
+def test_rounded_long_figures_match_but_misquoted_ones_do_not():
+    tools = {"get_financials": {"ocf": {"value": 19556000000}}, "get_technicals": {"rsi14": 66.0}}
+    ok = draft(claims=["Operating cash flow of 19,560,000,000"])
+    assert v.verify_forecast(ok, tools)["status"] == "green"            # rounded to 4 digits
+    off = draft(claims=["Operating cash flow of 19,700,000,000"])
+    assert v.verify_forecast(off, tools)["status"] == "orange"          # 0.7% off: not a rounding
+    assert v.verify_forecast(draft(claims=["RSI 64 (approaching overbought)"]),
+                             tools)["status"] == "orange"                # a real misquote stays flagged
+
+
+def test_filing_table_numbers_stated_in_millions_verify():
+    filing = {"search_filings": {"results": [
+        {"text": "Net sales 32,260 and operating income 10,588 (in millions)", "source": "10-K"}]}}
+    ok = draft(claims=["Net sales were $32,260 million", "Operating income of $10,588 million"])
+    assert v.verify_forecast(ok, filing)["status"] == "green"
+    bad = draft(claims=["Net sales were $33,000 million"])
+    assert v.verify_forecast(bad, filing)["status"] == "orange"
+    # the unit scaling applies only to filing text, never to numeric tool fields
+    assert v.verify_forecast(draft(claims=["Revenue of $5.0 million"]),
+                             {"get_financials": {"x": 5000}})["status"] == "orange"
