@@ -1,0 +1,28 @@
+{
+ "multi_specialists": {
+  "n": 165,
+  "with_unverified": 2,
+  "revised": 0,
+  "status": {
+   "green": 163,
+   "orange": 2
+  }
+ },
+ "multi_critic_verifier": {
+  "n": 165,
+  "with_unverified": 0,
+  "revised": 152,
+  "status": {
+   "green": 165
+  }
+ },
+ "multi_rag": {
+  "n": 165,
+  "with_unverified": 1,
+  "revised": 164,
+  "status": {
+   "green": 164,
+   "orange": 1
+  }
+ }
+}
