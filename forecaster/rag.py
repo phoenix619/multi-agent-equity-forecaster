@@ -7,14 +7,15 @@ Relevance (Module 3 lab 2) so the returned passages are relevant AND different.
 
 As-of safety: only filings filed on or before the as-of date are indexed or searched.
 """
+import hashlib
 import json
 import re
 
 import numpy as np
 
 from . import llm
-from .config import (CACHE_DIR, RAG_CHUNK_CHARS, RAG_MMR_LAMBDA, RAG_OVERLAP_CHARS,
-                     RAG_TOP_K)
+from .config import (CACHE_DIR, EMBED_MODEL, RAG_CHUNK_CHARS, RAG_MMR_LAMBDA,
+                     RAG_OVERLAP_CHARS, RAG_TOP_K)
 from .data import edgar
 
 MAX_SECTION_CHARS = 120_000
@@ -142,9 +143,19 @@ def _normalize(m: np.ndarray) -> np.ndarray:
     return m / np.where(n == 0, 1, n)
 
 
+def index_key(filing: dict) -> str:
+    """Cache key: accession plus the settings that decide what the vectors mean."""
+    # The vectors are only comparable when they came from the same embedding model
+    # and chunking recipe. Include those inputs so config changes rebuild the index.
+    key_data = {"accession": filing["accession"], "embedding_model": EMBED_MODEL,
+                "chunk_chars": RAG_CHUNK_CHARS, "overlap_chars": RAG_OVERLAP_CHARS,
+                "index_version": 2}
+    return hashlib.sha256(json.dumps(key_data, sort_keys=True).encode()).hexdigest()[:24]
+
+
 def build_index(filing: dict) -> dict:
-    """Chunks and embeddings for one filing (cached by accession number)."""
-    key = filing["accession"].replace("-", "")
+    """Chunks and embeddings for one filing, keyed by accession and index config."""
+    key = index_key(filing)
     meta_p, vec_p = _rag_dir() / f"{key}.json", _rag_dir() / f"{key}.npy"
     if meta_p.exists() and vec_p.exists():
         return {"chunks": json.loads(meta_p.read_text()), "vectors": np.load(vec_p)}

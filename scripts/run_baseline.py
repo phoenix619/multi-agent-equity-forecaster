@@ -54,7 +54,7 @@ def main():
         elif t.get("type") == "timing":
             print(f"  {t['agent']}: {t['seconds']}s")
         elif t.get("agent") == "critic" and t.get("type") == "review":
-            print(f"  critic: {t['verdict']}{'  (NO VALID ANSWER - defaulted)' if t.get('failed') else ''}")
+            print(f"  critic: {t['verdict']}{'  (NO VALID ANSWER - review unavailable)' if t.get('failed') else ''}")
             if t.get("weakest_claim"):
                 print(f"    weakest claim: {t['weakest_claim']}")
             for i in t.get("issues", []):

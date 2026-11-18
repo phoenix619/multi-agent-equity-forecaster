@@ -231,3 +231,39 @@ def test_one_malformed_json_is_repaired_not_lost(monkeypatch):
     assert out["forecast"] is not None and out["forecast"]["probability"] == 0.58
     assert fake.roles.count("strategist") == 2           # the draft and the repair request
     assert out["model_calls"] == 3 * 2 + 2
+
+
+def test_critic_failure_abstains_and_requires_review(monkeypatch):
+    class BrokenCritic(FakeLLM):
+        def __call__(self, role, messages, tools=None, **kw):
+            if role == "critic":
+                self.roles.append(role)
+                return _resp("")
+            return super().__call__(role, messages, tools, **kw)
+
+    _patch(monkeypatch, BrokenCritic([GOOD]))
+    f = drive("multi_critic_verifier")["forecast"]
+    assert f["critic"]["failed"] and f["critic"]["verdict"] == "unavailable"
+    assert f["verification"]["abstained"] and f["probability"] == 0.5
+    assert f["verification"]["review_required"] and f["verification"]["route_reason"] == "critic_unavailable"
+    assert f["evidence"] == [] and f["rating"] == "Hold"
+
+
+def test_orange_result_withholds_unsupported_rationale_and_flags_review(monkeypatch):
+    bad_rationale = dict(GOOD, rationale="Revenue grew 18.4% year over year.")
+    _patch(monkeypatch, FakeLLM([bad_rationale, bad_rationale]))
+    f = drive("multi_critic_verifier")["forecast"]
+    assert "18.4" not in f["rationale"] and "withheld" in f["rationale"].lower()
+    assert f["verification"]["review_required"] and f["verification"]["route_reason"] == "unverified_claims"
+
+
+def test_green_result_is_not_flagged_for_review(monkeypatch):
+    _patch(monkeypatch, FakeLLM([GOOD]))
+    v = drive("multi_critic_verifier")["forecast"]["verification"]
+    assert not v["review_required"] and v["route_reason"] is None and not v["abstained"]
+
+
+def test_unrouted_variant_never_abstains_or_flags(monkeypatch):
+    _patch(monkeypatch, FakeLLM([BAD]))
+    v = drive("multi_specialists")["forecast"]["verification"]
+    assert not v["review_required"] and not v["abstained"]

@@ -61,10 +61,20 @@ def show(res: dict):
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("P(outperform S&P 500, 20d)", f"{f['probability']:.0%}")
     c2.metric("Rating", f.get("rating", "-"))
-    c3.metric("Guardrail", LIGHT.get(ver.get("status"), "n/a (baseline)"))
+    c3.metric("Number check", LIGHT.get(ver.get("status"), "n/a (baseline)"))
     c4.metric("Time", f"{res.get('seconds', 0):.0f}s", f"{res.get('model_calls')} model / "
               f"{res.get('tool_calls')} tool calls", delta_color="off")
-    if ver.get("abstained"):
+    if ver.get("review_required"):
+        if ver.get("route_reason") == "critic_unavailable":
+            st.warning("The independent Critic did not return a valid review. The forecast "
+                       "was withheld at the 50% base rate and requires human review.")
+        elif ver.get("route_reason") == "verifier_red":
+            st.warning("The Verifier could not establish numeric support. The forecast was "
+                       "withheld at the 50% base rate and requires human review.")
+        else:
+            st.warning("Some numeric claims did not match the collected tool results. "
+                       "Unsupported text was removed and the forecast requires human review.")
+    elif ver.get("abstained"):
         st.warning("The guardrail abstained (red): too many unverified numbers, so the "
                    "forecast was reset to the 50% base rate.")
     st.markdown("**Rationale**")
@@ -102,7 +112,7 @@ def show(res: dict):
             crit = f.get("critic") or {}
             if crit:
                 st.write(f"Critic verdict: **{crit.get('verdict')}**"
-                         f"{' (no valid answer, defaulted)' if crit.get('failed') else ''}")
+                         f"{' (review unavailable)' if crit.get('failed') else ''}")
                 if crit.get("weakest_claim"):
                     st.write(f"Weakest claim: {crit['weakest_claim']}")
                 for i in crit.get("issues", []):
