@@ -153,7 +153,7 @@ def test_critic_revise_triggers_revision_even_when_green(monkeypatch):
 
 
 def test_invalid_strategist_json_gives_error_not_crash(monkeypatch):
-    _patch(monkeypatch, FakeLLM(["not json"]))
+    _patch(monkeypatch, FakeLLM(["not json", "still not json"]))   # first try and the repair
     out = drive("multi_critic_verifier")
     assert out["forecast"] is None and out["error"]
 
@@ -222,3 +222,12 @@ def test_repeated_search_calls_are_merged():
     out = ma._tool_results(state)
     assert [r["text"] for r in out["search_filings"]["results"]] == ["a", "b"]
     assert "get_macro" not in out
+
+
+def test_one_malformed_json_is_repaired_not_lost(monkeypatch):
+    fake = FakeLLM(['{"probability": 0.58, "rationale": "x", "evidence": [,"{"claim"', GOOD])
+    _patch(monkeypatch, fake)
+    out = drive("multi_specialists")
+    assert out["forecast"] is not None and out["forecast"]["probability"] == 0.58
+    assert fake.roles.count("strategist") == 2           # the draft and the repair request
+    assert out["model_calls"] == 3 * 2 + 2

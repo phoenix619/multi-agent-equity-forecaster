@@ -30,9 +30,11 @@ def _setup(monkeypatch, tmp_path, replies):
 
 def test_truncated_detection():
     empty = {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
-    full = {"choices": [{"finish_reason": "length", "message": {"content": "{}"}}]}
+    partial = {"choices": [{"finish_reason": "length", "message": {"content": '{"a": [1, 2'}}]}
+    done = {"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]}
     tool = {"choices": [{"finish_reason": "length", "message": {"content": "", "tool_calls": [1]}}]}
-    assert llm.truncated(empty) and not llm.truncated(full) and not llm.truncated(tool)
+    assert llm.truncated(empty) and llm.truncated(partial)       # empty OR cut off mid-answer
+    assert not llm.truncated(done) and not llm.truncated(tool)
 
 
 def test_empty_length_answer_is_retried_with_more_tokens(monkeypatch, tmp_path):
@@ -67,3 +69,11 @@ def test_reasoning_effort_sent_and_escalation_can_be_disabled(monkeypatch, tmp_p
                    reasoning_effort="none", escalate=False, retries=3)
     assert llm.truncated(out)
     assert all(b["reasoning_effort"] == "none" and b["max_tokens"] == 4000 for b in bodies)
+
+
+def test_partial_json_cut_off_by_the_limit_is_retried(monkeypatch, tmp_path):
+    sent = _setup(monkeypatch, tmp_path, [FakeResp('{"probability": 0.5, "evidence": [{"c', "length"),
+                                          FakeResp('{"probability": 0.5}', "stop")])
+    out = llm.chat("m", [{"role": "user", "content": "q"}], max_tokens=4000)
+    assert out["choices"][0]["message"]["content"] == '{"probability": 0.5}'
+    assert sent == [4000, 8000]

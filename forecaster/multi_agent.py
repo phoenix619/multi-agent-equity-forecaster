@@ -173,11 +173,24 @@ def _strategist_messages(state: dict) -> list:
 
 
 def _ask_strategist(messages: list):
+    """Returns (draft, text, error, model_calls). One repair attempt if the JSON is invalid."""
     resp = llm.chat("strategist", messages, max_tokens=4000)
     if "error" in resp:
-        return None, "", resp["error"]
+        return None, "", resp["error"], 1
     text = resp["choices"][0]["message"].get("content") or ""
-    return _parse_json(text), text, None
+    draft = _parse_json(text)
+    if draft is not None:
+        return draft, text, None, 1
+    fix = messages + [{"role": "assistant", "content": text},
+                      {"role": "user", "content": "Your reply was not valid JSON. Reply again "
+                       "with ONLY the complete, valid JSON object, nothing else."}]
+    resp2 = llm.chat("strategist", fix, max_tokens=6000)
+    if "error" not in resp2:
+        text2 = resp2["choices"][0]["message"].get("content") or ""
+        draft2 = _parse_json(text2)
+        if draft2 is not None:
+            return draft2, text2, None, 2
+    return None, text, None, 2
 
 
 # ---------------------------------------------------------------- nodes
@@ -212,8 +225,8 @@ def stub_node(name: str, state: State) -> dict:
 def strategist_node(state: State) -> dict:
     t0 = time.time()
     messages = _strategist_messages(state)
-    draft, text, err = _ask_strategist(messages)
-    upd = {"calls": 1, "trace": [{"agent": "strategist", "type": "draft",
+    draft, text, err, n = _ask_strategist(messages)
+    upd = {"calls": n, "trace": [{"agent": "strategist", "type": "draft",
                                   "content": text[:2000]}, _timing("strategist", t0)]}
     if err or draft is None:
         upd["error"] = err or {"message": "strategist answer was not valid JSON"}
@@ -285,8 +298,8 @@ def revise_node(state: State) -> dict:
                                      + "\nDo not mention the reviewer, the issues or these "
                                        "instructions in your answer; just write the improved "
                                        "forecast. Reply with ONLY the same JSON."}]
-    draft, text, err = _ask_strategist(messages)
-    upd = {"calls": 1, "attempts": state.get("attempts", 0) + 1,
+    draft, text, err, n = _ask_strategist(messages)
+    upd = {"calls": n, "attempts": state.get("attempts", 0) + 1,
            "trace": [{"agent": "strategist", "type": "revision", "content": text[:2000]},
                      _timing("strategist_revision", t0)]}
     if draft is not None:

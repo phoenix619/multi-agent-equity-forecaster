@@ -1,0 +1,126 @@
+{
+  "multi_critic_verifier": {
+    "n": 165,
+    "pending": 0,
+    "base_rate": 0.509,
+    "brier": 0.2586,
+    "brier_always_base_rate": 0.2499,
+    "brier_always_50": 0.25,
+    "accuracy": 0.46,
+    "calibration": {
+      "40-50%": {
+        "n": 67,
+        "mean_forecast": 0.45,
+        "outperformed": 0.537
+      },
+      "50-60%": {
+        "n": 89,
+        "mean_forecast": 0.525,
+        "outperformed": 0.483
+      },
+      ">=60%": {
+        "n": 5,
+        "mean_forecast": 0.656,
+        "outperformed": 0.4
+      },
+      "<40%": {
+        "n": 4,
+        "mean_forecast": 0.325,
+        "outperformed": 0.75
+      }
+    }
+  },
+  "multi_rag": {
+    "n": 165,
+    "pending": 0,
+    "base_rate": 0.509,
+    "brier": 0.2578,
+    "brier_always_base_rate": 0.2499,
+    "brier_always_50": 0.25,
+    "accuracy": 0.429,
+    "calibration": {
+      "40-50%": {
+        "n": 61,
+        "mean_forecast": 0.453,
+        "outperformed": 0.607
+      },
+      "50-60%": {
+        "n": 98,
+        "mean_forecast": 0.526,
+        "outperformed": 0.439
+      },
+      "<40%": {
+        "n": 4,
+        "mean_forecast": 0.347,
+        "outperformed": 0.5
+      },
+      ">=60%": {
+        "n": 2,
+        "mean_forecast": 0.675,
+        "outperformed": 1.0
+      }
+    }
+  },
+  "multi_specialists": {
+    "n": 165,
+    "pending": 0,
+    "base_rate": 0.509,
+    "brier": 0.265,
+    "brier_always_base_rate": 0.2499,
+    "brier_always_50": 0.25,
+    "accuracy": 0.448,
+    "calibration": {
+      "<40%": {
+        "n": 4,
+        "mean_forecast": 0.35,
+        "outperformed": 0.75
+      },
+      "50-60%": {
+        "n": 89,
+        "mean_forecast": 0.555,
+        "outperformed": 0.472
+      },
+      ">=60%": {
+        "n": 22,
+        "mean_forecast": 0.642,
+        "outperformed": 0.455
+      },
+      "40-50%": {
+        "n": 50,
+        "mean_forecast": 0.454,
+        "outperformed": 0.58
+      }
+    }
+  },
+  "single_agent_react": {
+    "n": 165,
+    "pending": 0,
+    "base_rate": 0.509,
+    "brier": 0.266,
+    "brier_always_base_rate": 0.2499,
+    "brier_always_50": 0.25,
+    "accuracy": 0.433,
+    "calibration": {
+      "40-50%": {
+        "n": 85,
+        "mean_forecast": 0.446,
+        "outperformed": 0.565
+      },
+      "50-60%": {
+        "n": 53,
+        "mean_forecast": 0.556,
+        "outperformed": 0.396
+      },
+      "<40%": {
+        "n": 16,
+        "mean_forecast": 0.346,
+        "outperformed": 0.562
+      },
+      ">=60%": {
+        "n": 11,
+        "mean_forecast": 0.632,
+        "outperformed": 0.545
+      }
+    }
+  }
+}
