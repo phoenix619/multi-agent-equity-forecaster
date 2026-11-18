@@ -29,6 +29,8 @@ from .tools import TOOL_SCHEMAS, make_tools
 VARIANTS = {
     "multi_specialists": {"critic": False, "route": False},
     "multi_critic_verifier": {"critic": True, "route": True},
+    # + filing text retrieval (RAG over 10-K/10-Q risk factors and MD&A)
+    "multi_rag": {"critic": True, "route": True, "filings": True},
 }
 
 # name -> (tools it may call, focus)
@@ -41,6 +43,17 @@ SPECIALISTS = {
     "macro": (["get_macro"], "which macro series matter for this company and how they moved"),
     "technical": (["get_technicals"], "trend, momentum, volatility and entry timing"),
 }
+# Added only in the RAG variant: reads the text of the filings.
+FILINGS_SPECIALIST = {"filings": (
+    ["search_filings"],
+    "risks, litigation, liquidity and management commentary found in the TEXT of the latest "
+    "10-K and 10-Q. Call search_filings two or three times with different specific queries "
+    "(for example 'principal risks', 'liquidity and capital resources', 'outlook and trends'). "
+    "Report each finding as a short paraphrase or quote and cite its source field exactly "
+    "(form, accession, section)")}
+ALL_SPECIALISTS = {**SPECIALISTS, **FILINGS_SPECIALIST}
+STEPS = {"filings": 5}   # tool-call rounds allowed per specialist (default 3)
+
 # Slots in the design with no data source built yet; they report a gap, no model call.
 STUBS = {"analyst_news": "No analyst-rating or news data source is connected in this build."}
 
@@ -125,8 +138,24 @@ class State(TypedDict, total=False):
 
 
 # ---------------------------------------------------------------- helpers
+def fan_out(variant: str) -> list:
+    """Agents that run in parallel before the Strategist."""
+    extra = list(FILINGS_SPECIALIST) if VARIANTS[variant].get("filings") else []
+    return list(SPECIALISTS) + extra + list(STUBS)
+
+
 def _tool_results(state: dict) -> dict:
-    return {r["tool"]: r["obs"] for r in state.get("tool_log", []) if r["ok"]}
+    """Latest result per tool; repeated search_filings calls are merged, not overwritten."""
+    out = {}
+    for r in state.get("tool_log", []):
+        if not r["ok"]:
+            continue
+        if r["tool"] == "search_filings":
+            out.setdefault("search_filings", {"results": []})["results"].extend(
+                r["obs"].get("results", []))
+        else:
+            out[r["tool"]] = r["obs"]
+    return out
 
 
 def _findings_json(state: dict) -> str:
@@ -135,6 +164,9 @@ def _findings_json(state: dict) -> str:
 
 def _strategist_messages(state: dict) -> list:
     system = STRATEGIST_SYSTEM.format(horizon=HORIZON_TRADING_DAYS, as_of=state["as_of"])
+    if VARIANTS.get(state.get("variant"), {}).get("filings"):
+        system += ("\nFindings from filing text carry a source such as "
+                   "'10-K <accession> Risk Factors'. Prefer them for risks, and cite that source.")
     user = (f"Ticker {state['ticker']}, as of {state['as_of']}.\n"
             f"Specialist findings (JSON):\n{_findings_json(state)}")
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -150,18 +182,19 @@ def _ask_strategist(messages: list):
 
 # ---------------------------------------------------------------- nodes
 def orchestrate_node(state: State) -> dict:
-    plan = list(SPECIALISTS) + list(STUBS)
+    plan = fan_out(state.get("variant") or "multi_critic_verifier")
     return {"trace": [{"agent": "orchestrator", "type": "plan", "specialists": plan,
                        "note": "all specialists run in parallel; as-of date fixed by code"}]}
 
 
 def specialist_node(name: str, state: State) -> dict:
     t0 = time.time()
-    tool_names, focus = SPECIALISTS[name]
+    tool_names, focus = ALL_SPECIALISTS[name]
     system = SPECIALIST_SYSTEM.format(role=name, focus=focus, as_of=state["as_of"],
                                       horizon=HORIZON_TRADING_DAYS)
     out = react("specialist", system, f"Analyze {state['ticker']}.", tool_names,
-                make_tools(state["as_of"]), TOOL_SCHEMAS, agent=name)
+                make_tools(state["as_of"]), TOOL_SCHEMAS, agent=name,
+                max_steps=STEPS.get(name, 3))
     findings = out["final"] or {
         "summary": "", "findings": [],
         "gaps": [f"{name} specialist produced no valid answer: "
@@ -338,7 +371,7 @@ def build_graph(variant: str):
     cfg = VARIANTS[variant]
     g = StateGraph(State)
     g.add_node("orchestrate", orchestrate_node)
-    fan = list(SPECIALISTS) + list(STUBS)
+    fan = fan_out(variant)
 
     def _specialist(name):
         def node(state: State) -> dict:
@@ -353,7 +386,9 @@ def build_graph(variant: str):
     def finalize(state: State) -> dict:
         return finalize_node(state, variant)
 
-    for name in SPECIALISTS:
+    for name in fan:
+        if name in STUBS:
+            continue
         g.add_node(name, _specialist(name))
     for name in STUBS:
         g.add_node(name, _stub(name))

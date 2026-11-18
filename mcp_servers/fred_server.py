@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mcp.server.fastmcp import FastMCP
 
+from forecaster import macro
 from forecaster.data import fred
 
 mcp = FastMCP("fred")
@@ -22,6 +23,13 @@ def get_macro_series(series_id: str, as_of: str) -> dict:
 def get_macro_snapshot(as_of: str) -> dict:
     """Oil, 10-year yield, fed funds rate and CPI as of a date."""
     return fred.macro_snapshot(as_of)
+
+
+@mcp.tool()
+def get_macro(ticker: str, as_of: str) -> dict:
+    """Macro series that matter for this company, chosen from its industry (SIC code), each
+    with its reason. Series with no identified exposure are excluded."""
+    return macro.relevant_macro(ticker, as_of)
 
 
 if __name__ == "__main__":

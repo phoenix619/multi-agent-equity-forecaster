@@ -17,11 +17,11 @@ Work in progress (final deliverables due Nov 20, 2026).
 | Forecast log + scorer (Brier, calibration) | Done |
 | Unit tests (51, offline) | Done |
 | Historical backtest runner | Ready, not yet run |
-| MCP servers (EDGAR, prices, FRED) | Written, not yet wired into the agent |
+| MCP servers (EDGAR + filing search, prices + technicals, FRED + macro) wired in via `--mcp` | Built, live checks pending |
 | Deterministic Verifier (numbers vs tool results) | Done |
 | Multi-agent LangGraph pipeline: specialists, Strategist, Critic, guardrail routing | Built, first live runs pending |
 | Analyst and news data sources | Planned (specialist slot reports a gap) |
-| RAG over 10-K/10-Q filings (MMR retrieval) | Planned |
+| RAG over 10-K/10-Q filings (Granite embeddings, MMR retrieval) | Built, live checks pending |
 | Tree-of-Thought judge, guardrail routing, ablation | Planned |
 | Streamlit chat UI | Planned |
 
@@ -63,6 +63,7 @@ cp .env.example .env     # then fill in FRED_API_KEY and EDGAR_USER_AGENT
 
 ollama pull gpt-oss:20b
 ollama pull gemma4:12b
+ollama pull granite-embedding:278m   # filing retrieval (multi_rag variant)
 ```
 
 - `FRED_API_KEY`: free at fred.stlouisfed.org.
@@ -78,6 +79,7 @@ python scripts/test_local.py                      # check local models (tool cal
 python scripts/run_baseline.py AAPL               # one forecast, as of today
 python scripts/run_baseline.py AAPL 2026-09-21    # as of a past date
 python scripts/run_baseline.py AAPL --variant multi_critic_verifier   # multi-agent
+python scripts/run_baseline.py AAPL --variant multi_rag --mcp          # + filing retrieval, tools via MCP
 python scripts/run_universe.py                    # all tickers, appended to eval/forecasts/live.jsonl
 python scripts/run_backtest.py --dates 2026-09-21 # resumable historical backtest
 python scripts/score.py [live]                    # score logged forecasts

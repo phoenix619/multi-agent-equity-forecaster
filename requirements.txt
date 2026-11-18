@@ -1,5 +1,8 @@
 requests
 pandas
+numpy
 yfinance
-mcp>=1.2
+mcp>=1.2,<2
 langgraph
+beautifulsoup4
+lxml

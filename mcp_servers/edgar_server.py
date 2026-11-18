@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mcp.server.fastmcp import FastMCP
 
+from forecaster import rag, tools
 from forecaster.data import edgar
 
 mcp = FastMCP("edgar")
@@ -16,13 +17,20 @@ def get_financials(ticker: str, as_of: str) -> dict:
     """Latest quarterly and annual revenue, margins, debt and cash flow for a
     ticker, using only filings filed on or before as_of (YYYY-MM-DD). Ratios are
     computed in code. Each figure includes form, period and accession for citation."""
-    return edgar.get_financials(ticker, as_of)
+    return tools._trim_financials(edgar.get_financials(ticker, as_of))
 
 
 @mcp.tool()
-def list_filings(ticker: str, as_of: str, limit: int = 6) -> list:
+def list_filings(ticker: str, as_of: str, limit: int = 4) -> list:
     """Recent 10-K and 10-Q filings for a ticker filed on or before as_of."""
     return edgar.list_filings(ticker, as_of, limit=limit)
+
+
+@mcp.tool()
+def search_filings(ticker: str, as_of: str, query: str) -> dict:
+    """Most relevant, non-redundant passages from the latest 10-K and 10-Q (risk factors and
+    MD&A) filed on or before as_of, each with filing, accession and section for citation."""
+    return rag.search_filings(ticker, as_of, query)
 
 
 @mcp.resource("filing://{ticker}/{as_of}")

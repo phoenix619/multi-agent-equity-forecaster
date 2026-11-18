@@ -4,7 +4,8 @@ Run from the equity-forecaster folder:
     python scripts/run_baseline.py DAL 2026-11-13        # as of a past date
     python scripts/run_baseline.py AAPL --log            # also append to the live forecast log
     python scripts/run_baseline.py AAPL --variant multi_critic_verifier
-Variants: single_agent_react (default), multi_specialists, multi_critic_verifier
+    python scripts/run_baseline.py AAPL --variant multi_rag --mcp   # filing RAG, tools via MCP
+Variants: single_agent_react (default), multi_specialists, multi_critic_verifier, multi_rag
 """
 import json
 import sys
@@ -19,6 +20,10 @@ from forecaster import baseline, variants
 def main():
     argv = sys.argv[1:]
     variant = "single_agent_react"
+    if "--mcp" in argv:                       # call tools through MCP servers instead
+        import os
+        os.environ["TOOL_BACKEND"] = "mcp"
+        argv.remove("--mcp")
     if "--variant" in argv:
         i = argv.index("--variant")
         variant = argv[i + 1]

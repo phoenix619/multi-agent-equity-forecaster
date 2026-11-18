@@ -1,8 +1,8 @@
 """One entry point for the four architecture variants used in the ablation."""
 from . import baseline
 
-VARIANTS = ["single_agent_react", "multi_specialists", "multi_critic_verifier"]
-# A fourth variant (+ filing RAG and Tree-of-Thought judge) is added after the RAG step.
+VARIANTS = ["single_agent_react", "multi_specialists", "multi_critic_verifier", "multi_rag"]
+# A Tree-of-Thought judge, if built, becomes a fifth variant.
 
 
 def run(variant: str, ticker: str, as_of: str) -> dict:

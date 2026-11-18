@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mcp.server.fastmcp import FastMCP
 
+from forecaster import indicators
 from forecaster.data import prices
 
 mcp = FastMCP("prices")
@@ -21,6 +22,14 @@ def get_price_history(ticker: str, as_of: str, days: int = 400) -> dict:
     return {"ticker": ticker, "as_of": as_of,
             "dates": df["Date"].tolist(), "close": df["Close"].round(4).tolist(),
             "volume": df["Volume"].tolist()}
+
+
+@mcp.tool()
+def get_technicals(ticker: str, as_of: str) -> dict:
+    """Trend, momentum and volatility (moving averages, RSI, MACD, ATR, Bollinger Bands) plus
+    a paper-trade entry zone, stop-loss and target, from prices up to as_of. For timing,
+    not direction."""
+    return indicators.technical_summary(prices.get_prices(ticker, as_of, days=400))
 
 
 if __name__ == "__main__":

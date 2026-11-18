@@ -4,7 +4,8 @@ The as-of date is fixed by the caller, never chosen by the model, so an agent
 cannot accidentally (or by prompt injection) read data from the future.
 All tools are read-only.
 """
-from . import indicators, macro
+from . import indicators, macro, rag
+from .config import secret
 from .data import edgar, prices
 
 TOOL_SCHEMAS = [
@@ -42,6 +43,21 @@ TOOL_SCHEMAS = [
 ]
 
 BALANCE_SHEET = {"long_term_debt", "equity"}
+SEARCH_SCHEMA = {"type": "function", "function": {
+    "name": "search_filings",
+    "description": ("Search the text of the company's latest 10-K and 10-Q (risk factors and "
+                    "management's discussion) for passages relevant to a query. Returns the "
+                    "most relevant, non-redundant passages, each with its filing, accession "
+                    "number and section for citation. Use specific queries such as "
+                    "'supplier concentration', 'liquidity and capital resources' or "
+                    "'litigation'."),
+    "parameters": {"type": "object",
+                   "properties": {"ticker": {"type": "string"}, "query": {"type": "string"}},
+                   "required": ["ticker", "query"]}}}
+# The single-agent baseline keeps its original four tools so its measured results stay valid.
+BASELINE_SCHEMAS = list(TOOL_SCHEMAS)
+TOOL_SCHEMAS = BASELINE_SCHEMAS + [SEARCH_SCHEMA]
+
 KEEP = ["revenue", "gross_profit", "operating_income", "net_income",
         "operating_cash_flow", "long_term_debt", "equity"]
 
@@ -66,8 +82,20 @@ def _trim_financials(fin: dict) -> dict:
     return out
 
 
-def make_tools(as_of: str) -> dict:
-    """Return {tool_name: callable(**args)} bound to a fixed as-of date."""
+def make_tools(as_of: str, backend: str | None = None) -> dict:
+    """Return {tool_name: callable(**args)} bound to a fixed as-of date.
+
+    backend "direct" calls Python functions; "mcp" calls the same tools through MCP
+    servers over stdio. Default comes from TOOL_BACKEND (direct). Either way the as-of
+    date is injected here by code; the model never supplies it.
+    """
+    if (backend or secret("TOOL_BACKEND", "direct")) == "mcp":
+        from . import mcp_client
+        return mcp_client.make_mcp_tools(as_of)
+    return make_direct_tools(as_of)
+
+
+def make_direct_tools(as_of: str) -> dict:
 
     def get_financials(ticker: str):
         return _trim_financials(edgar.get_financials(ticker, as_of))
@@ -82,5 +110,9 @@ def make_tools(as_of: str) -> dict:
     def get_macro(ticker: str):
         return macro.relevant_macro(ticker, as_of)
 
+    def search_filings(ticker: str, query: str):
+        return rag.search_filings(ticker, as_of, query)
+
     return {"get_financials": get_financials, "list_filings": list_filings,
-            "get_technicals": get_technicals, "get_macro": get_macro}
+            "get_technicals": get_technicals, "get_macro": get_macro,
+            "search_filings": search_filings}
