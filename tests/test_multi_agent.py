@@ -23,6 +23,12 @@ VERY_BAD = {"probability": 0.7, "rationale": "Up 11.1%, 12.2%, 13.3%, 14.4%.",
             "evidence": [{"claim": "x", "source": "s"}], "risks": []}
 
 
+SEARCH = {"results": [{"text": "Liquidity: we held $2.5 billion in cash and equivalents and "
+                               "expect supplier concentration to remain a risk.",
+                       "source": "10-K 0001-26-000015 Risk Factors (period 2025-12-31)",
+                       "similarity": 0.8}]}
+
+
 def _resp(content=None, tool_calls=None):
     msg = {"content": content}
     if tool_calls:
@@ -55,7 +61,8 @@ def _patch(monkeypatch, fake):
     monkeypatch.setattr(llm, "chat", fake)
     monkeypatch.setattr(ma, "make_tools", lambda as_of: {
         "get_financials": lambda ticker: FIN, "list_filings": lambda ticker: [],
-        "get_technicals": lambda ticker: TECH, "get_macro": lambda ticker: {"series": {}}})
+        "get_technicals": lambda ticker: TECH, "get_macro": lambda ticker: {"series": {}},
+        "search_filings": lambda ticker, query="": SEARCH})
 
 
 def drive(variant):
@@ -75,11 +82,10 @@ def drive(variant):
             else:
                 s[k] = v
 
+    s["variant"] = variant
     apply(ma.orchestrate_node(s))
-    for name in ma.SPECIALISTS:
-        apply(ma.specialist_node(name, s))
-    for name in ma.STUBS:
-        apply(ma.stub_node(name, s))
+    for name in ma.fan_out(variant):
+        apply(ma.stub_node(name, s) if name in ma.STUBS else ma.specialist_node(name, s))
     apply(ma.strategist_node(s))
     if cfg["critic"] and ma.after_strategist(s) == "critic":
         apply(ma.critic_node(s))
@@ -187,3 +193,32 @@ def test_critic_failure_is_visible_not_silent(monkeypatch):
     assert out["forecast"]["critic"]["failed"] is True
     review = [t for t in out["trace"] if t.get("type") == "review"][0]
     assert review["failed"] is True
+
+
+def test_rag_variant_adds_filings_specialist_and_accepts_filing_numbers(monkeypatch):
+    draft = {"probability": 0.55, "rationale": "Cash is ample.",
+             "evidence": [{"claim": "The company held $2.5 billion in cash", "source": "10-K"}],
+             "risks": [{"risk": "Supplier concentration remains a risk", "source": "10-K"}]}
+    _patch(monkeypatch, FakeLLM([draft]))
+    out = drive("multi_rag")
+    f = out["forecast"]
+    assert "filings" in f["specialists"] and "filings" in ma.fan_out("multi_rag")
+    assert "filings" not in ma.fan_out("multi_critic_verifier")
+    assert f["verification"]["status"] == "green"                  # $2.5 billion is in the filing text
+    assert not any(g.startswith("Text of filing risk factors") for g in f["gaps"])
+
+
+def test_other_variants_keep_the_filing_text_gap(monkeypatch):
+    _patch(monkeypatch, FakeLLM([GOOD]))
+    f = drive("multi_critic_verifier")["forecast"]
+    assert any(g.startswith("Text of filing risk factors") for g in f["gaps"])
+
+
+def test_repeated_search_calls_are_merged():
+    state = {"tool_log": [
+        {"tool": "search_filings", "ok": True, "obs": {"results": [{"text": "a"}]}},
+        {"tool": "search_filings", "ok": True, "obs": {"results": [{"text": "b"}]}},
+        {"tool": "get_macro", "ok": False, "obs": {"error": "x"}}]}
+    out = ma._tool_results(state)
+    assert [r["text"] for r in out["search_filings"]["results"]] == ["a", "b"]
+    assert "get_macro" not in out

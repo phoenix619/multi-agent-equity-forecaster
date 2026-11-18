@@ -79,3 +79,34 @@ def test_indicator_window_is_not_a_claim_but_real_values_still_checked():
     # a real value is still checked: RSI 20 would match nothing here, 14 is a window
     bad = draft(claims=["RSI at 63"])
     assert v.verify_forecast(bad, TOOLS)["status"] == "orange"
+
+
+def test_non_breaking_hyphens_do_not_create_false_claims():
+    text = ("The 10\u2011year yield, the 50\u2011day and 200\u2011day averages and a 20\u2013day "
+            "window are context; margin 27.6%")
+    assert v.extract_claims(text) == v.extract_claims("margin 27.6%")
+    out = v.verify_forecast(draft(rationale=text, claims=["Net margin is 27.6%"]), TOOLS)
+    assert out["status"] == "green", out["unverified"]
+
+
+def test_percent_sign_with_a_space_is_still_a_percent():
+    assert v.extract_claims("above the 50 % base rate") == []          # the 50% benchmark
+    claims = v.extract_claims("net margin of 27.6 % this year")
+    assert claims and claims[0]["pct"] and claims[0]["value"] == 27.6
+    d = draft(rationale="modestly above the 50 % base rate", claims=["Net margin is 27.6 %"])
+    assert v.verify_forecast(d, TOOLS)["status"] == "green"
+
+
+def test_more_non_data_numbers_found_in_real_drafts():
+    cases = ["price below the 20\u2011, 50\u2011, and 200\u2011day moving averages",   # compound hyphens
+             "filing 0000320193-26-000020 confirms the figures",                          # accession
+             "cash of this size as of September 26 2026 is ample",                        # date
+             "WTI up 5% 30d and up 81% 90d"]                                              # glued units
+    got = [[c["raw"] for c in v.extract_claims(t)] for t in cases]
+    assert got == [[], [], [], ["5%", "81%"]]
+    # thresholds: unmatched "below 50" is not flagged, but a real RSI value still is checked
+    ok = draft(claims=["RSI 14 is 75.3, above 70"])
+    assert v.verify_forecast(ok, TOOLS)["status"] == "green"
+    assert v.verify_forecast(draft(claims=["RSI is 63"]), TOOLS)["status"] == "orange"
+    # a numeric range keeps both ends as claims
+    assert [c["raw"] for c in v.extract_claims("a range of $100-$110")] == ["$100", "$110"]

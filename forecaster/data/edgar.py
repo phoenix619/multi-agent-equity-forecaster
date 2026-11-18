@@ -27,6 +27,26 @@ def _get(url: str) -> dict:
     return r.json()
 
 
+def _get_text(url: str) -> str:
+    """GET a filing document (HTML) from SEC with the required User-Agent and pacing."""
+    global _last_call
+    ua = secret("EDGAR_USER_AGENT")
+    if not ua:
+        raise RuntimeError("Set EDGAR_USER_AGENT in .env (name and email).")
+    wait = 0.2 - (time.time() - _last_call)
+    if wait > 0:
+        time.sleep(wait)
+    r = requests.get(url, headers={"User-Agent": ua, "Accept-Encoding": "gzip"}, timeout=120)
+    _last_call = time.time()
+    r.raise_for_status()
+    return r.text
+
+
+def fetch_filing_html(url: str) -> str:
+    """A filed document never changes, so it is cached without expiry."""
+    return cache.cached("filing_html", [url], lambda: _get_text(url))
+
+
 def ticker_to_cik(ticker: str) -> str:
     data = cache.cached("edgar", ["tickers"],
                         lambda: _get("https://www.sec.gov/files/company_tickers.json"),

@@ -15,11 +15,16 @@ import re
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _NUM = re.compile(
     r"(?<![\w.])(?P<cur>\$)?(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
-    r"(?P<unit>%|\s?(?:percent|thousand|million|billion|trillion)\b|[bBmMkK]n?\b|x\b)?")
+    r"(?P<unit>\s?%|\s?(?:percent|thousand|million|billion|trillion)\b|[bBmMkK]n?\b|x\b)?")
 _SCALE = {"thousand": 1e3, "k": 1e3, "million": 1e6, "m": 1e6,
           "billion": 1e9, "b": 1e9, "bn": 1e9, "trillion": 1e12}
 # A number followed by these is a window length or a form name, not a data point.
-_NOT_DATA = re.compile(r"\s?-?(day|week|month|year|trading|session|K\b|Q\b)", re.I)
+_NOT_DATA = re.compile(r"\s?-?(day|week|month|year|trading|session|K\b|Q\b)|d\b", re.I)
+_ACCESSION = re.compile(r"\b\d{10}-\d{2}-\d{6}\b")            # SEC accession numbers
+_MONTH_BEFORE = re.compile(
+    r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*$", re.I)    # "September 26"
+# RSI-style cut-offs: "below 50", "above 70", "near 30" are thresholds, not measurements.
+_THRESHOLD = re.compile(r"(below|above|under|over|near|around|toward|towards|crosses?)\s*$", re.I)
 
 # "RSI 14", "SMA 50", "ATR(14)": the number is the indicator's window, not a data point.
 _INDICATOR = re.compile(r"(RSI|ATR|SMA|EMA|MA|MACD|ADX|CCI)\s*\(?$", re.I)
@@ -44,16 +49,34 @@ def collect_numbers(obj) -> list:
     return out
 
 
+def tool_pool(tool_results: dict) -> list:
+    """Every figure a draft may legitimately quote: numeric fields of the tool results,
+    plus numbers written inside retrieved filing passages (search_filings)."""
+    pool = []
+    for name, obs in tool_results.items():
+        if name == "search_filings":
+            for r in (obs or {}).get("results", []):
+                pool.extend(c["value"] for c in extract_claims(r.get("text", "")))
+        else:
+            pool.extend(collect_numbers(obs))
+    return pool
+
+
 def extract_claims(text: str) -> list:
     """Numbers in free text that look like data points, with units resolved."""
     text = re.sub(r"[\u00a0\u2009\u202f]", " ", text or "")  # models emit odd spaces
-    text = _DATE.sub(" ", text)
+    text = re.sub(r"[\u2010-\u2015\u2212]", "-", text)       # ...and non-breaking hyphens
+    text = _DATE.sub(" ", _ACCESSION.sub(" ", text))
     claims = []
     for m in _NUM.finditer(text):
         raw_num, unit = m.group("num"), (m.group("unit") or "").strip()
         after = text[m.end():m.end() + 12]
         if not unit and _NOT_DATA.match(after):
             continue
+        if not unit and after[:1] == "-" and not re.match(r"-\s?[\d$]", after):
+            continue          # "20-, 50-, and 200-day": a compound modifier, not a number
+        if _MONTH_BEFORE.search(text[:m.start()]):
+            continue          # day of a month, e.g. "September 26"
         if re.search(r"S\s?&\s?P\s*$", text[:m.start()], re.I):
             continue  # "S&P 500"
         decimals = len(raw_num.split(".")[1]) if "." in raw_num else 0
@@ -66,8 +89,11 @@ def extract_claims(text: str) -> list:
         if not unit and not m.group("cur") and decimals == 0 and (
                 1900 <= value <= 2100 or value < 10):
             continue  # years and small counts
-        window = bool(not unit and decimals == 0 and value in _WINDOWS
-                      and _INDICATOR.search(text[:m.start()]))
+        before = text[:m.start()]
+        window = bool(not unit and decimals == 0 and (
+            (value in _WINDOWS and _INDICATOR.search(before))
+            or (value in (30, 50, 70) and (_THRESHOLD.search(before)
+                                           or "RSI" in before[-40:].upper()))))
         claims.append({"raw": m.group(0).strip(), "value": value * scale,
                        "tol": 0.5 * 10 ** (-decimals) * scale + 1e-9, "pct": pct,
                        "window": window})
@@ -98,7 +124,7 @@ def forecast_texts(forecast: dict) -> list:
 
 def verify_forecast(forecast: dict, tool_results: dict) -> dict:
     """Check every number in the draft against the tool results."""
-    pool = collect_numbers(tool_results)
+    pool = tool_pool(tool_results)
     checked, unverified = 0, []
     for where, text in forecast_texts(forecast):
         for c in extract_claims(text):

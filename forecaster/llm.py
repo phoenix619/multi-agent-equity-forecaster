@@ -112,3 +112,36 @@ def chat(role_or_model: str, messages: list, tools: list | None = None,
             cache.put("llm", key, last)
         return last
     return last
+
+
+def embed(texts: list, model: str | None = None, batch: int = 16) -> list:
+    """Embed texts with the Ollama embedding model (OpenAI-compatible /embeddings).
+
+    Each text's vector is cached on disk, so re-indexing the same filing is free.
+    Raises RuntimeError with a clear message if the model is missing or Ollama is down.
+    """
+    from .config import EMBED_MODEL
+    model = model or EMBED_MODEL
+    out = [None] * len(texts)
+    todo = []
+    for i, t in enumerate(texts):
+        hit = cache.get("embed", cache.make_key([model, t]))
+        if hit is not None:
+            out[i] = hit
+        else:
+            todo.append(i)
+    headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
+    for start in range(0, len(todo), batch):
+        idx = todo[start:start + batch]
+        try:
+            r = requests.post(f"{LLM_BASE_URL}/embeddings", headers=headers, timeout=600,
+                              json={"model": model, "input": [texts[i] for i in idx]})
+        except requests.exceptions.ConnectionError:
+            raise RuntimeError(f"Cannot reach {LLM_BASE_URL}. Is Ollama running?")
+        if r.status_code != 200:
+            raise RuntimeError(f"embedding request failed ({r.status_code}): {r.text[:200]}. "
+                               f"Is the model pulled? ollama pull {model}")
+        for i, d in zip(idx, r.json()["data"]):
+            out[i] = d["embedding"]
+            cache.put("embed", cache.make_key([model, texts[i]]), d["embedding"])
+    return out

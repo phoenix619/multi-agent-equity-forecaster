@@ -52,6 +52,18 @@ MODELS = {
     "judge": "gemma4:12b",
 }
 
+# Embeddings for filing retrieval (RAG), served by Ollama. IBM Granite family;
+# the embedding variant is not individually listed in internal model guidance, so
+# confirm before any use beyond local testing.
+EMBED_MODEL = secret("EMBED_MODEL", "granite-embedding:278m")
+RAG_CHUNK_CHARS = 1200      # about 300 tokens per chunk
+RAG_OVERLAP_CHARS = 200
+RAG_MMR_LAMBDA = 0.6        # 1 = pure relevance, 0 = pure diversity (Module 3 lab 2)
+RAG_TOP_K = 4
+
+# How agents reach tools: "direct" Python calls (default) or "mcp" servers over stdio.
+# Read at call time: secret("TOOL_BACKEND").
+
 # Macro series from FRED used by the Macro/News agent.
 FRED_SERIES = {
     "oil_wti": "DCOILWTICO",

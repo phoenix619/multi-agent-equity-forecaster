@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import llm
 from .config import HORIZON_TRADING_DAYS, ROOT
-from .tools import TOOL_SCHEMAS, make_tools
+from .tools import BASELINE_SCHEMAS, make_tools
 
 MAX_STEPS = 8
 PROB_MIN, PROB_MAX = 0.05, 0.95
@@ -83,6 +83,8 @@ def coverage_gaps(trace: list, as_of: str) -> list:
     """Gaps computed from what actually happened, not written by the model."""
     gaps = list(UNAVAILABLE)
     called = {t["tool"]: t for t in trace if t["type"] == "tool"}
+    if called.get("search_filings", {}).get("ok"):   # filing text was actually retrieved
+        gaps = [g for g in gaps if not g.startswith("Text of filing risk factors")]
     for name in EXPECTED_TOOLS:
         if name not in called:
             gaps.append(f"{name} was not consulted")
@@ -139,7 +141,7 @@ def run(ticker: str, as_of: str, role: str = "orchestrator", max_steps: int = MA
     result, error, model_calls = None, None, 0
 
     for step in range(1, max_steps + 1):
-        resp = llm.chat(role, messages, tools=TOOL_SCHEMAS, max_tokens=4000)
+        resp = llm.chat(role, messages, tools=BASELINE_SCHEMAS, max_tokens=4000)
         model_calls += 1
         if "error" in resp:
             error = resp["error"]
