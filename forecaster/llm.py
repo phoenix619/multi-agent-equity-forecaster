@@ -18,15 +18,15 @@ MAX_ESCALATE = 16000  # token ceiling when a reasoning model runs out of budget
 
 
 def truncated(resp: dict) -> bool:
-    """True when the model hit max_tokens before writing any answer (reasoning models
-    can spend the whole budget thinking and return empty content)."""
+    """True when the model hit max_tokens before finishing its answer. Reasoning models can
+    spend the whole budget thinking (empty answer) or run out mid-JSON (partial answer);
+    either way the reply is unusable, so it is retried with a larger budget, never cached."""
     try:
         ch = resp["choices"][0]
         msg = ch["message"]
     except (KeyError, IndexError, TypeError):
         return False
-    return (ch.get("finish_reason") == "length" and not (msg.get("content") or "").strip()
-            and not msg.get("tool_calls"))
+    return ch.get("finish_reason") == "length" and not msg.get("tool_calls")
 
 
 class BudgetExceeded(RuntimeError):
