@@ -156,9 +156,11 @@ def verify_forecast(forecast: dict, tool_results: dict) -> dict:
 
 
 def drop_unverified(forecast: dict, unverified: list) -> dict:
-    """Remove evidence and risk items that contain an unverified number."""
+    """Remove or withhold forecast text fields containing unverified numbers."""
     bad = {u["where"] for u in unverified}
     out = dict(forecast)
+    if "rationale" in bad:
+        out["rationale"] = "Rationale withheld because it contains unverified numeric claims."
     out["evidence"] = [e for i, e in enumerate(forecast.get("evidence") or [])
                        if f"evidence[{i}]" not in bad]
     out["risks"] = [r for i, r in enumerate(forecast.get("risks") or [])

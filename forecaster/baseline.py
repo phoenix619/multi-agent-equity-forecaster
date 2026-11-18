@@ -239,6 +239,8 @@ def log_forecast(result: dict, folder: str = "forecasts", name: str = "live.json
         row["verification"] = ver["status"]
         row["unverified"] = len(ver["unverified"])
         row["abstained"] = ver.get("abstained", False)
+        row["review_required"] = bool(ver.get("review_required"))
+        row["route_reason"] = ver.get("route_reason")
         row["revisions"] = result["forecast"].get("revisions", 0)
         crit = result["forecast"].get("critic") or {}
         row["critic_verdict"] = crit.get("verdict")

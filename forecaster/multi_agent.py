@@ -247,9 +247,12 @@ def critic_node(state: State) -> dict:
     crit = None if "error" in resp else _parse_json(
         resp["choices"][0]["message"].get("content"))
     failed = not isinstance(crit, dict)
-    crit = crit if not failed else {"verdict": "accept", "issues": [], "failed": True,
-                                    "note": "critic produced no valid answer; defaulted to accept"}
-    crit["verdict"] = "revise" if crit.get("verdict") == "revise" else "accept"
+    crit = crit if not failed else {"verdict": "unavailable", "issues": [], "failed": True,
+                                    "note": "critic produced no valid answer; independent review unavailable"}
+    if failed:
+        crit["verdict"] = "unavailable"
+    else:
+        crit["verdict"] = "revise" if crit.get("verdict") == "revise" else "accept"
     crit["issues"] = [i for i in (crit.get("issues") or []) if isinstance(i, dict)]
     return {"critic": crit, "calls": 1,
             "trace": [{"agent": "critic", "type": "review", "verdict": crit["verdict"],
@@ -325,12 +328,18 @@ def assemble(state: dict, variant: str) -> dict:
                else verifier.verify_forecast(draft, _tool_results(state)))
         draft = dict(draft)
         abstained = False
+        critic_failed = bool((state.get("critic") or {}).get("failed"))
+        verifier_review = cfg["route"] and ver["status"] != verifier.GREEN
         if cfg["route"]:
-            if ver["status"] == verifier.RED:
+            if ver["status"] == verifier.RED or critic_failed:
                 abstained = True
                 draft = {"probability": 0.5, "probability_raw": draft.get("probability"),
-                         "rationale": "Abstained: the Verifier could not tie the draft's "
-                                      "figures to tool results (red).",
+                         "rationale": (
+                             "Abstained: the independent Critic review was unavailable; "
+                             "human review is required."
+                             if critic_failed else
+                             "Abstained: the Verifier could not tie the draft's figures "
+                             "to tool results (red)."),
                          "evidence": [], "risks": []}
             elif ver["status"] == verifier.ORANGE:
                 draft = verifier.drop_unverified(draft, ver["unverified"])
@@ -357,7 +366,13 @@ def assemble(state: dict, variant: str) -> dict:
         tech = _tool_results(state).get("get_technicals", {})
         if tech.get("paper_trade"):
             draft["paper_trade"] = dict(tech["paper_trade"], signal=tech.get("signal"))
-        draft["verification"] = {**ver, "routed": cfg["route"], "abstained": abstained}
+        review_required = critic_failed or verifier_review
+        route_reason = ("critic_unavailable" if critic_failed else
+                        "verifier_red" if ver["status"] == verifier.RED and cfg["route"] else
+                        "unverified_claims" if verifier_review else None)
+        draft["verification"] = {**ver, "routed": cfg["route"], "abstained": abstained,
+                                  "review_required": review_required,
+                                  "route_reason": route_reason}
         draft["critic"] = state.get("critic")
         draft["revisions"] = state.get("attempts", 0)
         draft["specialists"] = state.get("specialists")

@@ -145,3 +145,16 @@ def test_relevance_floor_drops_far_off_topic_passages(monkeypatch, tmp_path):
     out = rag.search_filings("AAA", "2026-11-17", "supplier disruption supply chain", k=4)
     sims = [r["similarity"] for r in out["results"]]
     assert sims and max(sims) - min(sims) <= rag.MAX_SIM_DROP + 1e-6
+
+
+def test_index_cache_key_changes_with_embedding_or_chunk_settings(monkeypatch):
+    from forecaster import rag
+    f = {"accession": "0000-26-000001"}
+    base = rag.index_key(f)
+    assert rag.index_key(f) == base                                  # stable for same settings
+    assert rag.index_key({"accession": "0000-26-000002"}) != base    # different filing
+    monkeypatch.setattr(rag, "RAG_CHUNK_CHARS", rag.RAG_CHUNK_CHARS + 100)
+    assert rag.index_key(f) != base                                  # new chunk size, new index
+    monkeypatch.setattr(rag, "RAG_CHUNK_CHARS", rag.RAG_CHUNK_CHARS - 100)
+    monkeypatch.setattr(rag, "EMBED_MODEL", "other-embedding-model")
+    assert rag.index_key(f) != base                                  # new embedding model

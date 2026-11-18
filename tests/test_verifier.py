@@ -157,3 +157,13 @@ def test_filing_table_numbers_stated_in_millions_verify():
     # the unit scaling applies only to filing text, never to numeric tool fields
     assert v.verify_forecast(draft(claims=["Revenue of $5.0 million"]),
                              {"get_financials": {"x": 5000}})["status"] == "orange"
+
+
+def test_drop_unverified_withholds_a_rationale_with_bad_numbers():
+    d = draft(rationale="Revenue grew 18.4% year over year.", claims=["Net margin is 27.6%"])
+    res = v.verify_forecast(d, TOOLS)
+    cleaned = v.drop_unverified(d, res["unverified"])
+    assert "18.4" not in cleaned["rationale"] and "withheld" in cleaned["rationale"].lower()
+    assert [e["claim"] for e in cleaned["evidence"]] == ["Net margin is 27.6%"]
+    ok = v.drop_unverified(draft(rationale="Margins are steady.", claims=["x"]), [])
+    assert ok["rationale"] == "Margins are steady."
