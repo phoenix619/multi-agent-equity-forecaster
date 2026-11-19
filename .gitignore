@@ -11,3 +11,14 @@ RESULTS.md
 logs/
 eval/backtest/forecasts_superseded_v0.jsonl
 eval/**/scored_*_rows.json
+
+# raw vendor data (analyst/news): not redistributed
+data_offline/
+
+# analyst-ratings experiment and live-run helper: kept local, not part of the submission
+forecaster/data/analyst.py
+scripts/fetch_analyst_news.py
+scripts/refresh_live_prices.py
+scripts/test_fmp.py
+scripts/test_sentisense.py
+tests/test_analyst.py
