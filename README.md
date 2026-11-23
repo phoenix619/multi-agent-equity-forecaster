@@ -52,7 +52,7 @@ scripts/           run_baseline, run_universe, run_backtest, score, smoke tests
 ui/                Streamlit forecast and evaluation interface
 tests/             offline unit tests
 eval/              logged forecasts (JSONL, committed as timestamp proof)
-logs/              per-run traces with tool results
+logs/              per-run traces with tool results (sample traces only; the rest are git-ignored)
 ```
 
 ## Setup
@@ -71,6 +71,8 @@ ollama pull granite-embedding:278m   # filing retrieval (multi_rag variant)
 
 - `FRED_API_KEY`: free at fred.stlouisfed.org.
 - `EDGAR_USER_AGENT`: SEC requires a contact string, e.g. `Your Name you@example.com`.
+
+Notes: the forecasts need internet access (SEC EDGAR, FRED and Yahoo Finance via yfinance) and Ollama running locally (`ollama serve`, or the Ollama app). The models were run on a 24 GB laptop. A multi-agent forecast takes about 1 to 3 minutes; a first run is slower because data and model answers are cached in `.cache/`. The unit tests need neither network nor Ollama.
 
 ## Usage
 
@@ -96,6 +98,19 @@ streamlit run ui/app.py                           # demo interface
 ```
 
 Responses and API data are cached in `.cache/` (git-ignored).
+
+### Reproducing the evaluation
+
+The committed forecasts (`eval/backtest/forecasts.jsonl`, 660 rows) let you re-score without re-running the models. Scoring needs price data, so it needs internet access. Run the steps in this order, because later steps read files that earlier steps write locally (`eval/backtest/scored_*_rows.json`, git-ignored):
+
+```bash
+python scripts/score.py --common      # 1. scores the four variants on the same 165 pairs
+python scripts/benchmarks.py          # 2. non-LLM rules and permutation test (needs SPY prices)
+python scripts/eval_guardrails.py     # 3. input-guard adversarial set (offline)
+python scripts/make_figures.py        # 4. charts into docs/figures
+```
+
+Re-running the models themselves (`scripts/run_backtest.py`) takes many hours on a laptop and gives somewhat different probabilities, which is why the logged forecasts are the committed record. Sample single-agent traces from the 2026-11-16 live run are in `logs/`; other run traces stay local.
 
 ## Evaluation artifacts
 

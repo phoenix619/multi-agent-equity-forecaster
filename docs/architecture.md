@@ -17,13 +17,11 @@ flowchart LR
     O --> F[Fundamentals specialist]
     O --> M[Macro specialist]
     O --> T[Technical specialist]
-    O --> A[Analyst/news slot\ncurrently a gap stub]
     O -->|multi_rag only| S[Filings specialist]
 
     F --> J[Strategist]
     M --> J
     T --> J
-    A --> J
     S -. multi_rag .-> J
     J -->|multi_specialists| MS[Forecast and numeric check only]
     J -->|multi_critic_verifier or multi_rag| C[Critic\nGemma family]
@@ -83,8 +81,6 @@ sequenceDiagram
             Data-->>Tools: dated observations, filings, and calculated indicators
             Tools-->>Spec: tool output with source metadata
             Spec-->>Graph: structured findings and explicit gaps
-        and Analyst/news placeholder
-            Graph->>Graph: record unavailable data-source gap
         end
         Graph->>Judge: merge findings and ask for probability, evidence, risks
         Judge-->>Graph: structured draft
