@@ -64,6 +64,10 @@ def show(res: dict):
     c3.metric("Number check", LIGHT.get(ver.get("status"), "n/a (baseline)"))
     c4.metric("Time", f"{res.get('seconds', 0):.0f}s", f"{res.get('model_calls')} model / "
               f"{res.get('tool_calls')} tool calls", delta_color="off")
+    if res.get("seconds", 0) < 2:
+        st.caption("Time under 2 s: this run was replayed from the local cache of an "
+                   "earlier identical run, so the time is not the real latency "
+                   "(about 90 to 110 s for a fresh multi-agent run).")
     if ver.get("review_required"):
         if ver.get("route_reason") == "critic_unavailable":
             st.warning("The independent Critic did not return a valid review. The forecast "
@@ -82,13 +86,42 @@ def show(res: dict):
 
     left, right = st.columns(2)
     with left:
-        st.markdown("**Evidence** (every number is checked against tool results)")
+        st.markdown("**Evidence cited in the final forecast** (numbers are matched to tool results by the Verifier)")
         ev = pd.DataFrame(f.get("evidence") or [])
-        st.dataframe(ev, use_container_width=True, hide_index=True) if len(ev) else st.write("None")
+        if len(ev):
+            st.dataframe(ev, use_container_width=True, hide_index=True)
+        else:
+            st.write("None")
     with right:
         st.markdown("**Risks** (each backed by a tool result)")
         rk = pd.DataFrame(f.get("risks") or [])
-        st.dataframe(rk, use_container_width=True, hide_index=True) if len(rk) else st.write("None")
+        if len(rk):
+            st.dataframe(rk, use_container_width=True, hide_index=True)
+        else:
+            st.write("None")
+
+    spec_rows = []
+    def _norm(s):
+        return str(s).strip().rstrip(".").lower()
+
+    cited = {_norm(e.get("claim")) for e in (f.get("evidence") or []) if isinstance(e, dict)}
+    for name, s in (f.get("specialists") or {}).items():
+        if not isinstance(s, dict):
+            continue
+        for x in s.get("findings") or []:
+            if isinstance(x, dict):
+                spec_rows.append({"specialist": name, "direction": x.get("direction"),
+                                  "strength": x.get("strength"), "claim": x.get("claim"),
+                                  "cited in final evidence": _norm(x.get("claim")) in cited})
+    if spec_rows:
+        sp = pd.DataFrame(spec_rows)
+        n_all = sp["direction"].value_counts().to_dict()
+        st.markdown(f"**All specialist findings, including ones not cited above** "
+                    f"({len(sp)} findings: {n_all})")
+        st.caption("The Strategist chooses which findings to cite. This table shows "
+                   "everything the specialists reported, so contrary signals "
+                   "(for example RSI and MACD) stay visible.")
+        st.dataframe(sp, use_container_width=True, hide_index=True)
 
     pt = f.get("paper_trade")
     if pt:
@@ -111,10 +144,13 @@ def show(res: dict):
                 st.write(f"- unverified `{u['number']}` in {u['where']}")
             crit = f.get("critic") or {}
             if crit:
-                st.write(f"Critic verdict: **{crit.get('verdict')}**"
+                st.markdown("**Critic's review of the first draft** (the forecast above is "
+                            "the draft after revision; the Verifier checked it again)")
+                st.write(f"Critic verdict on the first draft: **{crit.get('verdict')}**"
                          f"{' (review unavailable)' if crit.get('failed') else ''}")
                 if crit.get("weakest_claim"):
-                    st.write(f"Weakest claim: {crit['weakest_claim']}")
+                    st.write(f"Weakest claim in the first draft (always named, even when "
+                             f"accepted): {crit['weakest_claim']}")
                 for i in crit.get("issues", []):
                     st.write(f"- {i.get('type')}: {i.get('detail')}")
     with st.expander("Agent timing and tool calls"):

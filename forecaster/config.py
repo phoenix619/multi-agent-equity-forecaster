@@ -33,7 +33,7 @@ LLM_API_KEY = secret("LLM_API_KEY", "ollama")
 # Optional cap on real (uncached) requests per UTC day. 0 = unlimited (local models).
 DAILY_CALL_BUDGET = int(secret("DAILY_CALL_BUDGET", "0"))
 
-# Non-financial large caps across sectors (confirm with the user).
+# Non-financial large caps across sectors.
 TICKERS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "XOM", "DAL", "MU",
            "JNJ", "WMT", "HD", "CAT", "NEE", "PG"]
 BENCHMARK = "SPY"
@@ -52,9 +52,8 @@ MODELS = {
     "judge": "gemma4:12b",
 }
 
-# Embeddings for filing retrieval (RAG), served by Ollama. IBM Granite family;
-# the embedding variant is not individually listed in internal model guidance, so
-# confirm before any use beyond local testing.
+# Embeddings for filing retrieval (RAG), served by Ollama (IBM Granite embedding
+# model). Check the model's license before any use beyond local testing.
 EMBED_MODEL = secret("EMBED_MODEL", "granite-embedding:278m")
 RAG_CHUNK_CHARS = 1200      # about 300 tokens per chunk
 RAG_OVERLAP_CHARS = 200

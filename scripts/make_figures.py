@@ -112,7 +112,7 @@ ax.axvline(0.25, color="crimson", ls="--", lw=1.2)
 ax.set_xlim(0.24, 0.27); ax.set_xlabel("Brier score (lower is better)")
 for y, it in zip(range(len(items))[::-1], items):
     ax.text(it[1] + 0.0003, y, f"{it[1]:.4f}", va="center", fontsize=9)
-ax.set_title("Benchmark ladder: no agent variant beats the constant forecast"); fig.tight_layout()
+ax.set_title("Benchmark ladder"); fig.tight_layout()
 fig.savefig(OUT / "benchmark_ladder.png"); plt.close(fig)
 
 # 5. Forecast spread by variant (shrinkage story)
@@ -142,3 +142,56 @@ for v in ("multi_specialists", "multi_critic_verifier", "multi_rag"):
               "status": dict(Counter(r.get("verification") for r in rs))}
 (OUT / "guardrail_ablation.json").write_text(json.dumps(abl, indent=1))
 print("figures written:", sorted(p.name for p in OUT.iterdir()))
+
+
+# 8. Architecture diagram (block flow of the routed multi-agent variants)
+from matplotlib.patches import FancyBboxPatch  # noqa: E402
+
+
+def box(ax, x, y, w, h, text, fc="#eaf1fb", ec="#2f6fb0", fs=9.5, bold=False):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.12",
+                                fc=fc, ec=ec, lw=1.4))
+    ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=fs,
+            fontweight="bold" if bold else "normal", wrap=True)
+
+
+def arrow(ax, x1, y1, x2, y2, style="-|>", ls="-", color="#444"):
+    ax.annotate("", xy=(x2, y2), xytext=(x1, y1),
+                arrowprops=dict(arrowstyle=style, color=color, lw=1.3, ls=ls))
+
+
+fig, ax = plt.subplots(figsize=(10.5, 7.2))
+ax.set_xlim(0, 14); ax.set_ylim(0, 10); ax.axis("off")
+box(ax, 0.3, 8.6, 2.6, 1.0, "User / CLI /\nStreamlit UI", "#f4f4f4", "#777")
+box(ax, 3.7, 8.6, 3.0, 1.0, "Input guard (rules)\nadvice, execution, injection,\nticker, date, sector", "#fdecea", "#c0392b", 8.5)
+box(ax, 7.5, 8.6, 3.0, 1.0, "Orchestrator (code)\nfixed plan, as-of date\nset by code", "#eaf1fb", "#2f6fb0", 8.5)
+arrow(ax, 2.9, 9.1, 3.7, 9.1); arrow(ax, 6.7, 9.1, 7.5, 9.1)
+ax.text(5.2, 8.25, "declined: reason, no forecast", fontsize=8, color="#c0392b", ha="center")
+# specialists
+sp = [("Fundamentals\n(EDGAR XBRL)", 0.5), ("Macro\n(FRED vintage)", 3.85), ("Technical\n(prices, indicators)", 7.2),
+      ("Filings RAG\n(multi_rag only)", 10.55)]
+SPW = 2.7
+for t, x in sp:
+    box(ax, x, 6.3, SPW, 1.2, t, "#e8f6ec", "#2e8b57", 9)
+    arrow(ax, 9.0, 8.6, x + SPW / 2, 7.5)
+# strategist -> critic -> verifier
+box(ax, 5.2, 4.3, 3.6, 1.1, "Strategist (gpt-oss:20b)\nprobability, evidence, risks", "#eaf1fb", "#2f6fb0", 9.5, True)
+for t, x in sp:
+    arrow(ax, x + SPW / 2, 6.3, 7.0, 5.4, color="#999")
+box(ax, 9.7, 4.3, 3.6, 1.1, "Critic (gemma4:12b)\ndifferent model family", "#f3eafb", "#7d3c98", 9.5, True)
+arrow(ax, 8.8, 4.85, 9.7, 4.85)
+box(ax, 9.7, 2.5, 3.6, 1.1, "Verifier (deterministic code)\nevery number vs tool results", "#e8f6ec", "#2e8b57", 9.5, True)
+arrow(ax, 11.5, 4.3, 11.5, 3.6)
+arrow(ax, 9.7, 3.05, 7.0, 4.3, ls="--", color="#c0392b")
+ax.text(8.0, 3.35, "one bounded\nrevision", fontsize=8, color="#c0392b", ha="center")
+# routing
+box(ax, 4.3, 0.4, 4.7, 1.5, "Guardrail routing\ngreen: deliver as is\norange: drop unsupported text, flag review\nred or Critic failure: abstain at 50%", "#fff6e5", "#d9a441", 8.5)
+arrow(ax, 9.7, 2.8, 9.0, 1.9)
+box(ax, 9.7, 0.4, 3.6, 1.5, "Finalize (code)\nrating, gaps, paper-trade\nlevels, log and trace", "#f4f4f4", "#777", 8.5)
+arrow(ax, 9.0, 1.15, 9.7, 1.15)
+# tools
+box(ax, 0.3, 2.4, 4.2, 2.2, "Read-only tools (as-of fixed by code)\nSEC EDGAR / filing text\nprices + indicators\nFRED macro (vintage dates)\nlocal embeddings (Granite)\ndirect Python or MCP servers", "#f4f4f4", "#777", 8.5)
+arrow(ax, 2.4, 4.6, 2.4, 6.3, ls="--", color="#777")
+ax.text(0.3, 1.5, "Variants compared:\n1 single agent\n2 specialists + Strategist\n    (Verifier measures only)\n3 + Critic and routing\n4 + filing RAG", fontsize=8.5, color="#333", va="center")
+fig.tight_layout(); fig.savefig(OUT / "architecture.png", dpi=170); plt.close(fig)
+print("architecture diagram written")
